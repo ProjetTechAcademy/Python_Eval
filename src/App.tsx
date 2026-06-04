@@ -81,6 +81,25 @@ function getTopicBadgeStyle(topic: string) {
   }
 }
 
+function getTopicLeftBorder(topic: string) {
+  switch (topic) {
+    case 'HTML & CSS':
+      return 'border-l-[6px] border-l-amber-500';
+    case 'Bootstrap':
+      return 'border-l-[6px] border-l-purple-500';
+    case 'Bases de Données':
+      return 'border-l-[6px] border-l-[#4285F4]';
+    case 'Python Backend':
+      return 'border-l-[6px] border-l-emerald-500';
+    case 'Python Quality & Flask':
+      return 'border-l-[6px] border-l-rose-500';
+    case 'APIs, Git & Sécurité':
+      return 'border-l-[6px] border-l-cyan-500';
+    default:
+      return 'border-l-[6px] border-l-slate-400';
+  }
+}
+
 export default function App() {
   const [fiches, setFiches] = useState<Fiche[]>(() => {
     const local = localStorage.getItem('m-motors-fiches');
@@ -364,6 +383,25 @@ export default function App() {
                   style={{ width: `${stats1.pct}%` }}
                 />
               </div>
+              <div className="mt-2.5">
+                {stats1.pct === 100 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-emerald-600 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                    👑 Perfection Absolue !
+                  </span>
+                ) : stats1.pct >= 75 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-indigo-700 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">
+                    ✨ Excellent travail, presque au bout !
+                  </span>
+                ) : stats1.pct >= 40 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-amber-600 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                    ⚡ Bonne dynamique, continuez !
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-slate-600 bg-slate-500/10 px-2.5 py-1 rounded-lg border border-slate-500/20">
+                    🌱 Échauffement, lancez les fiches !
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-xs">
@@ -407,6 +445,25 @@ export default function App() {
                   className="bg-red-500 h-full rounded-full transition-all duration-500" 
                   style={{ width: `${stats2.pct}%` }}
                 />
+              </div>
+              <div className="mt-2.5">
+                {stats2.pct === 100 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-emerald-600 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                    👑 Conformité jury à 100% !
+                  </span>
+                ) : stats2.pct >= 75 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-[#EA4335] bg-red-550/10 px-2.5 py-1 rounded-lg border border-red-500/20">
+                    🎖️ Excellente préparation jury !
+                  </span>
+                ) : stats2.pct >= 40 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-amber-600 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                    ⚡ Intégration jury en cours !
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-slate-600 bg-slate-500/10 px-2.5 py-1 rounded-lg border border-slate-500/20">
+                    📖 En attente d'audit pour le Jury !
+                  </span>
+                )}
               </div>
             </div>
 
@@ -487,34 +544,36 @@ export default function App() {
 
         {/* 3. SWITCH HUB ZONE: ACTIVATE USER INTERFACES */}
         <div className="w-full flex justify-center mb-8">
-          <div className="p-2 bg-slate-900 border-2 border-slate-950 rounded-full shadow-lg flex gap-2 w-full max-w-lg">
+          <div className={`p-2 bg-slate-900 border-2 border-slate-950 rounded-full shadow-lg flex gap-2 w-full max-w-md transition-all duration-300 ring-4 hover:scale-[1.01] ${
+            activeZone === 'A' ? 'ring-blue-500/20' : 'ring-red-500/20'
+          }`}>
             <button
               onClick={() => {
                 setActiveZone('A');
                 triggerToast("Zone A activée : Ma Progression Personnelle 🎯", "info");
               }}
-              className={`flex-1 py-3 px-5 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              className={`flex-1 py-2.5 px-4 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
                 activeZone === 'A'
-                  ? 'bg-[#4285F4] text-white shadow font-extrabold'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <User className="w-4 h-4 shrink-0" />
-              Zone A: Ma Réponse (Moi)
+              Zone A: Moi
             </button>
             <button
               onClick={() => {
                 setActiveZone('B');
                 triggerToast("Zone B activée : Livrables pour le Jury ⚖️", "info");
               }}
-              className={`flex-1 py-3 px-5 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              className={`flex-1 py-2.5 px-4 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
                 activeZone === 'B'
-                  ? 'bg-[#EA4335] text-white shadow font-extrabold'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-gradient-to-r from-red-600 to-pink-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <GraduationCap className="w-4 h-4 shrink-0" />
-              Zone B: Réponse Jury
+              Zone B: Jury
             </button>
           </div>
         </div>
@@ -538,20 +597,49 @@ export default function App() {
             {/* Filter tags list */}
             <div className="w-full lg:flex-1 overflow-x-auto no-scrollbar py-2">
               <div className="flex items-center gap-2 min-w-max">
-                <span className="text-xs text-slate-400 flex items-center gap-1"><Filter className="w-3.5 h-3.5" /> Thème:</span>
-                {topics.map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setSelectedTopic(t)}
-                    className={`p-2 px-4 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
-                      selectedTopic === t 
-                        ? 'bg-slate-900 text-white shadow' 
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {t === 'All' ? 'Tous 🗺️' : t}
-                  </button>
-                ))}
+                <span className="text-xs text-slate-400 flex items-center gap-1"><Filter className="w-3.5 h-3.5 animate-bounce" /> Thème:</span>
+                {topics.map(t => {
+                  const count = t === 'All' ? fiches.length : fiches.filter(f => f.topic === t).length;
+                  const isSelected = selectedTopic === t;
+                  
+                  const getAccentClass = () => {
+                    if (!isSelected) return 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-105 hover:shadow-sm';
+                    switch (t) {
+                      case 'HTML & CSS':
+                        return 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-md shadow-amber-500/10 border border-amber-400 rotate-1';
+                      case 'Bootstrap':
+                        return 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/10 border border-purple-500 -rotate-1';
+                      case 'Bases de Données':
+                        return 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md shadow-blue-500/10 border border-blue-500 rotate-1';
+                      case 'Python Backend':
+                        return 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/10 border border-emerald-500 -rotate-1';
+                      case 'Python Quality & Flask':
+                        return 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md shadow-rose-500/10 border border-rose-500 rotate-1';
+                      case 'APIs, Git & Sécurité':
+                        return 'bg-gradient-to-r from-cyan-600 to-teal-500 text-white shadow-md shadow-cyan-500/10 border border-cyan-500 -rotate-1';
+                      default:
+                        return 'bg-slate-900 text-white shadow-md rotate-0';
+                    }
+                  };
+
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => {
+                        setSelectedTopic(t);
+                        triggerToast(`Filtré par : ${t === 'All' ? 'Tous les cours' : t} ! 🌟`, "info");
+                      }}
+                      className={`p-1.5 px-3 rounded-xl text-[11px] font-extrabold cursor-pointer transition-all duration-300 flex items-center gap-1.5 transform active:scale-95 border-b-2 border-transparent ${getAccentClass()}`}
+                    >
+                      <span>{t === 'All' ? 'Tous 🗺️' : t}</span>
+                      <span className={`px-1.5 py-0.2 text-[9px] font-black rounded-full leading-none flex items-center justify-center ${
+                        isSelected ? 'bg-white/20 text-white' : 'bg-slate-205 text-slate-700'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -606,7 +694,7 @@ export default function App() {
               return (
                 <div 
                   key={fiche.id}
-                  className={`bg-white rounded-2xl border-2 shadow-sm p-4 lg:p-5 flex flex-col gap-3.5 relative overflow-hidden transition-all duration-300 ring-2 hover:scale-[1.005] hover:shadow-md ${
+                  className={`bg-white rounded-2xl border-2 shadow-sm p-4 lg:p-5 flex flex-col gap-3.5 relative overflow-hidden transition-all duration-300 ring-2 hover:scale-[1.005] hover:shadow-md ${getTopicLeftBorder(fiche.topic)} ${
                     isCompleted
                       ? (activeZone === 'A' 
                           ? 'border-emerald-500 bg-[#10b981]/[0.015] ring-[#34A853]/10 shadow-[0_4px_15px_-3px_rgba(16,185,129,0.15)]' 
