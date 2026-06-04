@@ -62,6 +62,25 @@ function getDriveEmbedUrl(url: string | undefined): string | null {
   return trimmed;
 }
 
+function getTopicBadgeStyle(topic: string) {
+  switch (topic) {
+    case 'HTML & CSS':
+      return 'bg-amber-500/10 text-amber-700 border-amber-500/20';
+    case 'Bootstrap':
+      return 'bg-purple-500/10 text-purple-700 border-purple-500/20';
+    case 'Bases de Données':
+      return 'bg-blue-500/10 text-[#4285F4] border-[#4285F4]/20';
+    case 'Python Backend':
+      return 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20';
+    case 'Python Quality & Flask':
+      return 'bg-rose-500/10 text-rose-700 border-rose-500/20';
+    case 'APIs, Git & Sécurité':
+      return 'bg-cyan-500/10 text-cyan-750 border-cyan-500/20';
+    default:
+      return 'bg-slate-100/80 text-slate-700 border-slate-205';
+  }
+}
+
 export default function App() {
   const [fiches, setFiches] = useState<Fiche[]>(() => {
     const local = localStorage.getItem('m-motors-fiches');
@@ -581,12 +600,20 @@ export default function App() {
             {filteredFiches.map(fiche => {
               const currentStatus = activeZone === 'A' ? fiche.status1 : fiche.status2;
               const completedDate = activeZone === 'A' ? fiche.date1 : fiche.date2;
+              const isCompleted = currentStatus === 'Fait';
+              const isEnCours = currentStatus === 'En cours';
 
               return (
                 <div 
                   key={fiche.id}
-                  className={`bg-white rounded-2xl border-2 shadow-sm p-4 lg:p-5 flex flex-col gap-3.5 relative overflow-hidden transition-all duration-300 ring-2 ring-slate-100/50 ${
-                    activeZone === 'A' ? 'border-blue-500/80 hover:border-blue-500' : 'border-red-500/80 hover:border-red-500'
+                  className={`bg-white rounded-2xl border-2 shadow-sm p-4 lg:p-5 flex flex-col gap-3.5 relative overflow-hidden transition-all duration-300 ring-2 hover:scale-[1.005] hover:shadow-md ${
+                    isCompleted
+                      ? (activeZone === 'A' 
+                          ? 'border-emerald-500 bg-[#10b981]/[0.015] ring-[#34A853]/10 shadow-[0_4px_15px_-3px_rgba(16,185,129,0.15)]' 
+                          : 'border-emerald-500 bg-[#10b981]/[0.015] ring-[#34A853]/10 shadow-[0_4px_15px_-3px_rgba(16,185,129,0.15)]')
+                      : isEnCours
+                        ? 'border-[#FBBC05] bg-[#FBBC05]/[0.01] ring-[#FBBC05]/10 shadow-[0_4px_12px_-3px_rgba(251,188,5,0.1)]'
+                        : (activeZone === 'A' ? 'border-blue-500/40 hover:border-blue-500 ring-slate-100/50' : 'border-red-500/40 hover:border-red-500 ring-slate-100/20')
                   }`}
                 >
                   {/* Top multi-color strip for Google Brand aesthetic */}
@@ -607,9 +634,16 @@ export default function App() {
                       <div>
                         {/* Topic identifier header */}
                         <div className="flex items-center justify-between gap-2 mb-2">
-                          <span className="px-2.5 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-[10px] font-black text-slate-600 uppercase tracking-wide">
-                            {fiche.topic}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2.5 py-0.5 border rounded-full text-[10px] font-black uppercase tracking-wide transition-all duration-300 ${getTopicBadgeStyle(fiche.topic)}`}>
+                              {fiche.topic}
+                            </span>
+                            {isCompleted && (
+                              <span className="text-[9px] bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse flex items-center gap-0.5">
+                                <Sparkles className="w-2.5 h-2.5" /> VALIDÉ
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-150">
                             N° {fiche.id}
                           </span>
@@ -623,8 +657,8 @@ export default function App() {
                       {/* Textual Actions (Immediate Action & Motors connection) placed SIDE-BY-SIDE to eliminate wasted space */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {/* Action Block */}
-                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-50/85 transition-all flex flex-col justify-between">
-                          <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-500 flex items-center gap-1 border-b border-slate-150 pb-1 mb-1.5">
+                        <div className="p-3 bg-amber-500/[0.02] border border-slate-200 border-l-[3.5px] border-l-amber-500 rounded-xl hover:bg-amber-500/[0.05] transition-all flex flex-col justify-between shadow-sm">
+                          <p className="text-[10px] uppercase tracking-wider font-extrabold text-amber-600 flex items-center gap-1 border-b border-amber-100 pb-1 mb-1.5">
                             ⚡ Action immédiate (Zéro BlaBla)
                           </p>
                           <p className="text-xs text-slate-800 font-medium leading-relaxed flex-1">
@@ -633,11 +667,11 @@ export default function App() {
                         </div>
 
                         {/* M-Motors project connection link */}
-                        <div className="p-3 bg-indigo-50/20 border border-indigo-100/60 rounded-xl hover:bg-indigo-50/40 transition-all flex flex-col justify-between">
+                        <div className="p-3 bg-indigo-500/[0.02] border border-indigo-150 border-l-[3.5px] border-l-indigo-500 rounded-xl hover:bg-indigo-500/[0.05] transition-all flex flex-col justify-between shadow-sm">
                           <p className="text-[10px] uppercase tracking-wider font-extrabold text-indigo-750 flex items-center gap-1 border-b border-indigo-150 pb-1 mb-1.5">
                             🎯 Lien avec Devoir M-Motors
                           </p>
-                          <p className="text-xs text-slate-600 italic leading-relaxed font-mono flex-1">
+                          <p className="text-xs text-slate-650 italic leading-relaxed font-mono flex-1">
                             {fiche.motorsLink}
                           </p>
                         </div>
@@ -650,27 +684,27 @@ export default function App() {
                             🟢 Statut de validation ({activeZone === 'A' ? 'Zone A - Vous' : 'Zone B - Jury'}):
                           </span>
                           {completedDate && (
-                            <span className="text-[9px] text-emerald-750 font-black flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                            <span className="text-[9px] text-emerald-750 font-black flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full shadow-sm">
                               <Calendar className="w-2.5 h-2.5 text-emerald-600" /> Validé le {completedDate}
                             </span>
                           )}
                         </div>
                         
-                        <div className="grid grid-cols-3 gap-1.5 bg-slate-100/80 p-1 rounded-xl">
+                        <div className="grid grid-cols-3 gap-1.5 bg-slate-100/85 p-1 rounded-xl">
                           {(['A faire', 'En cours', 'Fait'] as FicheStatus[]).map(status => {
                             const isActive = currentStatus === status;
                             const getStatusStyle = () => {
                               if (!isActive) return 'text-slate-650 hover:bg-white/60';
-                              if (status === 'Fait') return activeZone === 'A' ? 'bg-[#4285F4] text-white font-black shadow-sm' : 'bg-[#EA4335] text-white font-black shadow-sm';
-                              if (status === 'En cours') return 'bg-[#FBBC05] text-[#1e293b] font-black shadow-sm';
-                              return 'bg-slate-400 text-white font-black shadow-sm';
+                              if (status === 'Fait') return activeZone === 'A' ? 'bg-[#34A853] text-white font-black shadow-md scale-[1.02]' : 'bg-[#34A853] text-white font-black shadow-md scale-[1.02]';
+                              if (status === 'En cours') return 'bg-[#FBBC05] text-[#1e293b] font-black shadow-md scale-[1.02]';
+                              return 'bg-slate-400 text-white font-black shadow-md scale-[1.02]';
                             };
 
                             return (
                               <button
                                 key={status}
                                 onClick={() => handleStatusChange(fiche.id, activeZone, status)}
-                                className={`py-1.5 rounded-lg text-[10.5px] text-center select-none cursor-pointer tracking-tight transition-all font-bold ${getStatusStyle()}`}
+                                className={`py-1.5 rounded-lg text-[10.5px] text-center select-none cursor-pointer tracking-tight transition-all duration-300 font-bold hover:scale-[1.01] ${getStatusStyle()}`}
                               >
                                 {status === 'Fait' ? 'Fait ✔' : status === 'En cours' ? 'En cours ⏳' : 'À faire 💤'}
                               </button>
@@ -689,12 +723,12 @@ export default function App() {
                         
                         {/* Common File (PDF) with edit / custom link options */}
                         {fiche.coursFile && (
-                          <div className="p-2 bg-slate-50 hover:bg-slate-100/85 border border-slate-200 rounded-xl flex flex-col gap-1.5 transition-all mb-2 shadow-sm">
+                          <div className="p-2.5 bg-blue-500/[0.02] hover:bg-blue-500/[0.04] border border-slate-200 border-l-[3.5px] border-l-[#4285F4] rounded-xl flex flex-col gap-1.5 transition-all mb-2 shadow-sm transform hover:-translate-y-[1px]">
                             <div className="flex items-center justify-between text-[10px] gap-2">
                               <span className="font-bold text-slate-800 truncate flex items-center gap-1" title={fiche.coursFile}>
                                 📂 <span className="font-mono text-[10px] text-slate-700">{fiche.coursFile}</span>
                               </span>
-                              <span className="text-[8px] text-[#4285F4] bg-blue-50 border border-blue-100/50 px-1.5 py-0.5 rounded-md font-sans font-black uppercase shrink-0">
+                              <span className="text-[8px] text-[#4285F4] bg-blue-105 border border-blue-100 px-1.5 py-0.5 rounded-md font-sans font-black uppercase shrink-0">
                                 Support PDF
                               </span>
                             </div>
@@ -709,7 +743,7 @@ export default function App() {
                                     type: 'slide',
                                     ficheId: fiche.id
                                   })}
-                                  className="p-0.5 px-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-all text-[10px] flex items-center gap-1 font-bold cursor-pointer"
+                                  className="p-0.5 px-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-all text-[10px] flex items-center gap-1 font-bold cursor-pointer hover:scale-105 active:scale-95"
                                 >
                                   <span>👁️ Lire</span>
                                 </button>
@@ -719,7 +753,7 @@ export default function App() {
 
                               <button
                                 onClick={() => setEditingPdfFicheId(editingPdfFicheId === fiche.id ? null : fiche.id)}
-                                className="text-[8px] text-blue-600 hover:text-blue-750 font-bold hover:underline transition-all"
+                                className="text-[8px] text-blue-600 hover:text-blue-750 font-extrabold hover:underline transition-all"
                               >
                                 {fiche.coursFileUrl || fiche.coursFile.startsWith('http') ? '✏️ Modifier' : '🔗 Lier un PDF'}
                               </button>
