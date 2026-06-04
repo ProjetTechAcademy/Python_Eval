@@ -11,6 +11,7 @@ export interface Fiche {
   status1: FicheStatus;
   status2: FicheStatus;
   coursFile: string;
+  coursFileUrl?: string;
   
   // Zone A / Tab 1 resources (Evaluation progress / Needs response)
   audio1?: string;
