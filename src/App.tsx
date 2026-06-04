@@ -36,8 +36,19 @@ import {
   Download,
   Flame,
   User,
-  Heart
+  Heart,
+  ExternalLink
 } from 'lucide-react';
+
+function getDriveEmbedUrl(url: string | undefined): string | null {
+  if (!url) return null;
+  if (url.includes('/preview')) return url;
+  const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return `https://drive.google.com/file/d/${match[1]}/preview`;
+  }
+  return url;
+}
 
 export default function App() {
   const [fiches, setFiches] = useState<Fiche[]>(() => {
@@ -58,6 +69,13 @@ export default function App() {
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [showSyncPanel, setShowSyncPanel] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
+  const [selectedResourceForPreview, setSelectedResourceForPreview] = useState<{
+    title: string;
+    resourceName: string;
+    url: string;
+    type: string;
+    ficheId: number;
+  } | null>(null);
 
   // Auto-save changes
   useEffect(() => {
@@ -534,211 +552,264 @@ export default function App() {
             <p className="text-xs text-slate-500 mt-1">Ajustez les termes de recherche ou la thématique de filtre.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="flex flex-col gap-6">
             {filteredFiches.map(fiche => {
               const currentStatus = activeZone === 'A' ? fiche.status1 : fiche.status2;
               const completedDate = activeZone === 'A' ? fiche.date1 : fiche.date2;
-              const hasCommonFiles = !!fiche.coursFile;
 
               return (
-                <ThreeDBox 
-                  key={fiche.id} 
-                  themeColor={activeZone === 'A' ? 'blue' : 'red'}
-                  className="flex flex-col justify-between h-full"
+                <div 
+                  key={fiche.id}
+                  className={`bg-white rounded-[2rem] border-2 shadow-sm p-6 lg:p-8 flex flex-col xl:flex-row gap-8 relative overflow-hidden transition-all duration-300 ring-4 ring-slate-100 ${
+                    activeZone === 'A' ? 'border-blue-500/80 hover:border-blue-500' : 'border-red-500/80 hover:border-red-500'
+                  }`}
                 >
-                  {/* Topic identifier header */}
-                  <div className="flex items-center justify-between gap-1 mb-2">
-                    <span className="px-2.5 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-[10px] font-bold text-slate-600 uppercase">
-                      {fiche.topic}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      N° {fiche.id}
-                    </span>
+                  {/* Top multi-color strip for Google Brand aesthetic */}
+                  <div className="absolute top-0 left-0 w-full h-[5px] flex">
+                    <div className="flex-1 h-full bg-[#4285F4]" />
+                    <div className="flex-1 h-full bg-[#EA4335]" />
+                    <div className="flex-1 h-full bg-[#FBBC05]" />
+                    <div className="flex-1 h-full bg-[#34A853]" />
                   </div>
 
-                  {/* Title and descriptions */}
-                  <div>
-                    <h3 className="font-extrabold text-[#111827] text-base leading-tight mt-1 line-clamp-2 hover:line-clamp-none transition-all">
-                      {fiche.title}
-                    </h3>
+                  {/* LEFT COLUMN: Metadata, Title, and Interactive Status Selector */}
+                  <div className="flex-1 flex flex-col justify-between min-w-[280px]">
+                    <div>
+                      {/* Topic identifier header */}
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <span className="px-3 py-1 bg-slate-100 border border-slate-200 rounded-full text-[11px] font-black text-slate-600 uppercase tracking-wide">
+                          {fiche.topic}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-150">
+                          N° {fiche.id}
+                        </span>
+                      </div>
 
+                      <h3 className="font-black text-slate-900 text-lg md:text-xl leading-snug mt-2 text-balance">
+                        {fiche.title}
+                      </h3>
+                    </div>
+
+                    {/* Interactive Status Selector Bar */}
+                    <div className="mt-6 pt-4 border-t border-slate-100">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
+                        <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                          🟢 Statut de validation ({activeZone === 'A' ? 'Zone A - Vous' : 'Zone B - Jury'}):
+                        </span>
+                        {completedDate && (
+                          <span className="text-[10px] text-emerald-750 font-black flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full animate-pulse">
+                            <Calendar className="w-3 h-3 text-emerald-600" /> Validé le {completedDate}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-2 bg-slate-100 p-1.5 rounded-2xl">
+                        {(['A faire', 'En cours', 'Fait'] as FicheStatus[]).map(status => {
+                          const isActive = currentStatus === status;
+                          const getStatusStyle = () => {
+                            if (!isActive) return 'text-slate-600 hover:bg-white/60';
+                            if (status === 'Fait') return 'bg-[#34A853] text-white font-black shadow-md';
+                            if (status === 'En cours') return 'bg-[#FBBC05] text-[#1e293b] font-black shadow-md';
+                            return 'bg-slate-400 text-white font-black shadow-md';
+                          };
+
+                          return (
+                            <button
+                              key={status}
+                              onClick={() => handleStatusChange(fiche.id, activeZone, status)}
+                              className={`py-2 rounded-xl text-[11px] text-center select-none cursor-pointer tracking-tight transition-all font-bold ${getStatusStyle()}`}
+                            >
+                              {status === 'Fait' ? 'Fait ✔' : status === 'En cours' ? 'En cours ⏳' : 'À faire 💤'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* MIDDLE COLUMN: Textual Actions (Immediate Action & Motors connection) */}
+                  <div className="flex-1 flex flex-col justify-between gap-4 min-w-[280px]">
                     {/* Action Block */}
-                    <div className="mt-3 p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl">
-                      <p className="text-[11px] uppercase tracking-wider font-extrabold text-slate-500">Action immédiate (Zéro BlaBla)</p>
-                      <p className="text-xs text-slate-800 font-medium mt-1 leading-relaxed">
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:bg-slate-50/80 transition-all flex-1">
+                      <p className="text-[11px] uppercase tracking-wider font-black text-slate-500 flex items-center gap-1.5 border-b border-slate-200 pb-2.5">
+                        ⚡ Action immédiate (Zéro BlaBla)
+                      </p>
+                      <p className="text-sm text-slate-850 font-medium mt-3 leading-relaxed">
                         {fiche.action}
                       </p>
                     </div>
 
                     {/* M-Motors project connection link */}
-                    <div className="mt-2.5 p-2.5 bg-indigo-50/40 border border-indigo-100 rounded-xl">
-                      <p className="text-[11px] uppercase tracking-wider font-extrabold text-indigo-700">🎯 Lien avec Devoir M-Motors</p>
-                      <p className="text-xs text-slate-700 italic mt-0.5 leading-relaxed">
+                    <div className="p-4 bg-indigo-50/40 border border-indigo-100/80 rounded-2xl hover:bg-indigo-50/60 transition-all flex-1">
+                      <p className="text-[11px] uppercase tracking-wider font-black text-indigo-700 flex items-center gap-1.5 border-b border-indigo-150 pb-2.5">
+                        🎯 Lien avec Devoir M-Motors
+                      </p>
+                      <p className="text-sm text-slate-700 italic mt-3 leading-relaxed">
                         {fiche.motorsLink}
                       </p>
                     </div>
                   </div>
 
-                  {/* Interactive Status Selector Bar */}
-                  <div className="my-4 pt-3 border-t border-slate-100">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-slate-500">Statut du livrable:</span>
-                      {completedDate && (
-                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                          <Calendar className="w-3 h-3" /> Fait le {completedDate}
-                        </span>
+                  {/* RIGHT COLUMN: Resources Grid (Always displays BOTH Zone A and Zone B files) */}
+                  <div className="w-full xl:w-[420px] shrink-0 xl:border-l border-slate-100 pt-6 xl:pt-0 xl:pl-6 flex flex-col justify-between">
+                    <div>
+                      <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-1">
+                        📦 Supports & Ressources :
+                      </p>
+                      
+                      {/* Common File (PDF) */}
+                      {fiche.coursFile && (
+                        <div className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-2xl flex items-center justify-between text-xs transition-colors mb-4 shadow-sm">
+                          <span className="font-bold text-slate-800 line-clamp-1 flex items-center gap-2">
+                            📂 <span className="font-mono text-[11px] text-slate-700">{fiche.coursFile}</span>
+                          </span>
+                          <span className="text-[10px] text-[#4285F4] bg-blue-50 border border-blue-100/50 px-2.5 py-1 rounded-full font-sans font-black uppercase">
+                            Support PDF
+                          </span>
+                        </div>
                       )}
-                    </div>
-                    
-                    <div className="grid grid-cols-3 gap-2 bg-slate-100 p-1 rounded-xl">
-                      {(['A faire', 'En cours', 'Fait'] as FicheStatus[]).map(status => {
-                        const isActive = currentStatus === status;
-                        const getStatusStyle = () => {
-                          if (!isActive) return 'text-slate-600 hover:bg-white/50';
-                          if (status === 'Fait') return 'bg-[#34A853] text-white font-bold shadow-md';
-                          if (status === 'En cours') return 'bg-[#FBBC05] text-[#1e293b] font-bold shadow-md';
-                          return 'bg-slate-400 text-white font-bold shadow-md';
-                        };
 
-                        return (
-                          <button
-                            key={status}
-                            onClick={() => handleStatusChange(fiche.id, activeZone, status)}
-                            className={`py-1.5 rounded-lg text-[10px] text-center select-none cursor-pointer transition-all ${getStatusStyle()}`}
-                          >
-                            {status === 'Fait' ? 'Fait ✔' : status === 'En cours' ? 'En cours ⏳' : 'À faire 💤'}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                      {/* Side-by-side or stacked divisions for Zone A and Zone B files */}
+                      <div className="space-y-4">
+                        {/* Zone A Resource block */}
+                        {(fiche.audio1 || fiche.slide1 || fiche.video1 || fiche.image1 || fiche.nblm1) && (
+                          <div className="bg-blue-50/30 border border-blue-100 rounded-2xl p-3.5">
+                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2 flex items-center justify-between">
+                              <span>Zone A • Évaluations (Moi)</span>
+                              <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-tight">Zone A</span>
+                            </p>
+                            <div className="space-y-2">
+                              {fiche.audio1 && (
+                                <ResourcePlayer 
+                                  ficheId={fiche.id} 
+                                  ficheTitle={fiche.title} 
+                                  resourceName="Vocal d'évaluation (.m4a)" 
+                                  url={fiche.audio1} 
+                                  type="audio" 
+                                  zone="A" 
+                                  onPreviewInApp={setSelectedResourceForPreview}
+                                />
+                              )}
+                              {fiche.slide1 && (
+                                <ResourcePlayer 
+                                  ficheId={fiche.id} 
+                                  ficheTitle={fiche.title} 
+                                  resourceName="Slides Présentation" 
+                                  url={fiche.slide1} 
+                                  type="slide" 
+                                  zone="A" 
+                                  onPreviewInApp={setSelectedResourceForPreview}
+                                />
+                              )}
+                              {fiche.video1 && (
+                                <ResourcePlayer 
+                                  ficheId={fiche.id} 
+                                  ficheTitle={fiche.title} 
+                                  resourceName="Vidéo Explicative" 
+                                  url={fiche.video1} 
+                                  type="video" 
+                                  zone="A" 
+                                  onPreviewInApp={setSelectedResourceForPreview}
+                                />
+                              )}
+                              {fiche.image1 && (
+                                <ResourcePlayer 
+                                  ficheId={fiche.id} 
+                                  ficheTitle={fiche.title} 
+                                  resourceName="Schémas d'Appuis" 
+                                  url={fiche.image1} 
+                                  type="image" 
+                                  zone="A" 
+                                  onPreviewInApp={setSelectedResourceForPreview}
+                                />
+                              )}
+                              {fiche.nblm1 && (
+                                <ResourcePlayer 
+                                  ficheId={fiche.id} 
+                                  ficheTitle={fiche.title} 
+                                  resourceName="NotebookLM d'Appuis IA" 
+                                  url={fiche.nblm1} 
+                                  type="nblm" 
+                                  zone="A" 
+                                  onPreviewInApp={setSelectedResourceForPreview}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        )}
 
-                  {/* Resources Links Grid */}
-                  <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Supports / Ressources :</p>
-                    
-                    {/* Common PDF File */}
-                    {fiche.coursFile && (
-                      <div className="p-2 py-1.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl flex items-center justify-between text-xs transition-colors">
-                        <span className="font-medium text-slate-700 line-clamp-1 flex items-center gap-1.5">
-                          📂 <span className="font-mono text-[11px]">{fiche.coursFile}</span>
-                        </span>
-                        <span className="text-[10px] text-[#4285F4] bg-blue-50 px-2 py-0.5 rounded font-mono">Commun</span>
+                        {/* Zone B Resource block */}
+                        {(fiche.audio2 || fiche.slide2 || fiche.video2 || fiche.image2 || fiche.nblm2) && (
+                          <div className="bg-red-50/30 border border-red-100 rounded-2xl p-3.5">
+                            <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-2 flex items-center justify-between">
+                              <span>Zone B • Retour Jury / Soutenance</span>
+                              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-tight">Zone B</span>
+                            </p>
+                            <div className="space-y-2">
+                              {fiche.audio2 && (
+                                <ResourcePlayer 
+                                  ficheId={fiche.id} 
+                                  ficheTitle={fiche.title} 
+                                  resourceName="Vocal Soutenance (.m4a)" 
+                                  url={fiche.audio2} 
+                                  type="audio" 
+                                  zone="B" 
+                                  onPreviewInApp={setSelectedResourceForPreview}
+                                />
+                              )}
+                              {fiche.slide2 && (
+                                <ResourcePlayer 
+                                  ficheId={fiche.id} 
+                                  ficheTitle={fiche.title} 
+                                  resourceName="Slides Réponses Jury" 
+                                  url={fiche.slide2} 
+                                  type="slide" 
+                                  zone="B" 
+                                  onPreviewInApp={setSelectedResourceForPreview}
+                                />
+                              )}
+                              {fiche.video2 && (
+                                <ResourcePlayer 
+                                  ficheId={fiche.id} 
+                                  ficheTitle={fiche.title} 
+                                  resourceName="Vidéo Démonstration Jury" 
+                                  url={fiche.video2} 
+                                  type="video" 
+                                  zone="B" 
+                                  onPreviewInApp={setSelectedResourceForPreview}
+                                />
+                              )}
+                              {fiche.image2 && (
+                                <ResourcePlayer 
+                                  ficheId={fiche.id} 
+                                  ficheTitle={fiche.title} 
+                                  resourceName="Preuves & Graphiques d'Appui" 
+                                  url={fiche.image2} 
+                                  type="image" 
+                                  zone="B" 
+                                  onPreviewInApp={setSelectedResourceForPreview}
+                                />
+                              )}
+                              {fiche.nblm2 && (
+                                <ResourcePlayer 
+                                  ficheId={fiche.id} 
+                                  ficheTitle={fiche.title} 
+                                  resourceName="NotebookLM Réponses Jury" 
+                                  url={fiche.nblm2} 
+                                  type="nblm" 
+                                  zone="B" 
+                                  onPreviewInApp={setSelectedResourceForPreview}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
 
-                    {/* Dynamic Zone-related files */}
-                    <div className="grid grid-cols-1 gap-2 mt-1">
-                      {activeZone === 'A' ? (
-                        <>
-                          {fiche.audio1 && (
-                            <ResourcePlayer 
-                              ficheId={fiche.id} 
-                              ficheTitle={fiche.title} 
-                              resourceName="Vocal d'évaluation (.m4a)" 
-                              url={fiche.audio1} 
-                              type="audio" 
-                              zone="A" 
-                            />
-                          )}
-                          {fiche.slide1 && (
-                            <ResourcePlayer 
-                              ficheId={fiche.id} 
-                              ficheTitle={fiche.title} 
-                              resourceName="Slides Présentation" 
-                              url={fiche.slide1} 
-                              type="slide" 
-                              zone="A" 
-                            />
-                          )}
-                          {fiche.video1 && (
-                            <ResourcePlayer 
-                              ficheId={fiche.id} 
-                              ficheTitle={fiche.title} 
-                              resourceName="Vidéo Explicative" 
-                              url={fiche.video1} 
-                              type="video" 
-                              zone="A" 
-                            />
-                          )}
-                          {fiche.image1 && (
-                            <ResourcePlayer 
-                              ficheId={fiche.id} 
-                              ficheTitle={fiche.title} 
-                              resourceName="Schémas d'Appuis" 
-                              url={fiche.image1} 
-                              type="image" 
-                              zone="A" 
-                            />
-                          )}
-                          {fiche.nblm1 && (
-                            <ResourcePlayer 
-                              ficheId={fiche.id} 
-                              ficheTitle={fiche.title} 
-                              resourceName="NotebookLM d'Appuis IA" 
-                              url={fiche.nblm1} 
-                              type="nblm" 
-                              zone="A" 
-                            />
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          {fiche.audio2 && (
-                            <ResourcePlayer 
-                              ficheId={fiche.id} 
-                              ficheTitle={fiche.title} 
-                              resourceName="Vocal Soutenance (.m4a)" 
-                              url={fiche.audio2} 
-                              type="audio" 
-                              zone="B" 
-                            />
-                          )}
-                          {fiche.slide2 && (
-                            <ResourcePlayer 
-                              ficheId={fiche.id} 
-                              ficheTitle={fiche.title} 
-                              resourceName="Slides Réponses Jury" 
-                              url={fiche.slide2} 
-                              type="slide" 
-                              zone="B" 
-                            />
-                          )}
-                          {fiche.video2 && (
-                            <ResourcePlayer 
-                              ficheId={fiche.id} 
-                              ficheTitle={fiche.title} 
-                              resourceName="Vidéo Démonstration Jury" 
-                              url={fiche.video2} 
-                              type="video" 
-                              zone="B" 
-                            />
-                          )}
-                          {fiche.image2 && (
-                            <ResourcePlayer 
-                              ficheId={fiche.id} 
-                              ficheTitle={fiche.title} 
-                              resourceName="Preuves & Graphiques d'Appui" 
-                              url={fiche.image2} 
-                              type="image" 
-                              zone="B" 
-                            />
-                          )}
-                          {fiche.nblm2 && (
-                            <ResourcePlayer 
-                              ficheId={fiche.id} 
-                              ficheTitle={fiche.title} 
-                              resourceName="NotebookLM Réponses Jury" 
-                              url={fiche.nblm2} 
-                              type="nblm" 
-                              zone="B" 
-                            />
-                          )}
-                        </>
-                      )}
-
-                      {/* Default studi module support */}
-                      {fiche.studi && (
+                    {/* Default studi module support */}
+                    {fiche.studi && (
+                      <div className="mt-4">
                         <ResourcePlayer 
                           ficheId={fiche.id} 
                           ficheTitle={fiche.title} 
@@ -746,55 +817,95 @@ export default function App() {
                           url={fiche.studi} 
                           type="studi" 
                           zone="common" 
+                          onPreviewInApp={setSelectedResourceForPreview}
                         />
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
-                </ThreeDBox>
+
+                </div>
               );
             })}
           </div>
         )}
-
-        {/* Common Elements Footer Bento from design specification */}
-        <section className="bg-white p-5 rounded-3xl shadow-sm border-l-[12px] border-[#FBBC05] flex flex-col md:flex-row items-center justify-between gap-4 mt-10 animate-fadeIn">
-          <div className="flex flex-col sm:flex-row items-center gap-6">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">📚</span>
-              <div>
-                <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Common Course Segment</p>
-                <p className="text-xs font-bold text-slate-700">188_Py_B3_M03_S001_Introduction.pdf</p>
-              </div>
-            </div>
-            <div className="hidden sm:block h-8 w-px bg-slate-200"></div>
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🎞️</span>
-              <div>
-                <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Masterclass Video</p>
-                <p className="text-xs font-bold text-slate-700">Introduction_HTML_CSS.mp4</p>
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-2 w-full md:w-auto justify-end">
-            <a 
-              href="https://drive.google.com" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="px-6 py-2.5 bg-slate-900 text-white text-center rounded-full text-[11px] font-black uppercase tracking-tighter hover:bg-slate-800 transition-all cursor-pointer shadow-sm"
-            >
-              Open Drive
-            </a>
-            <a 
-              href="https://studi.fr" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="px-6 py-2.5 bg-blue-500 text-white text-center rounded-full text-[11px] font-black uppercase tracking-tighter shadow-lg shadow-blue-200 hover:bg-blue-600 transition-all cursor-pointer"
-            >
-              Studi Access
-            </a>
-          </div>
-        </section>
       </main>
+
+      {/* Immersive Full-Screen Audio & Document Player Preview Lightbox Modal */}
+      {selectedResourceForPreview && (
+        <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center p-4 sm:p-6 animate-fadeIn">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden border border-slate-200">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50 gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">👁️</span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[9px] font-black uppercase">
+                      LECTEUR DIRECT
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono">
+                      Fiche #{selectedResourceForPreview.ficheId}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-black text-slate-800 line-clamp-1 mt-0.5">
+                    {selectedResourceForPreview.title} &mdash; <span className="text-slate-500 font-medium">{selectedResourceForPreview.resourceName}</span>
+                  </h4>
+                </div>
+              </div>
+
+              {/* Header actions */}
+              <div className="flex items-center gap-2.5">
+                <a
+                  href={selectedResourceForPreview.url}
+                  target="_blank"
+                  referrerPolicy="no-referrer"
+                  rel="noopener noreferrer"
+                  className="px-4.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[11px] font-black uppercase flex items-center gap-1.5 transition-all cursor-pointer border border-slate-200"
+                >
+                  Ouvrir externe <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <button
+                  onClick={() => setSelectedResourceForPreview(null)}
+                  className="w-10 h-10 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center font-black text-sm transition-all cursor-pointer"
+                  title="Fermer le lecteur"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Iframe Sandbox Frame */}
+            <div className="flex-1 bg-slate-950 p-4 relative flex flex-col justify-between">
+              {getDriveEmbedUrl(selectedResourceForPreview.url) ? (
+                <iframe 
+                  src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
+                  className="w-full h-full rounded-2xl border-0 bg-slate-900" 
+                  allow="autoplay; encrypted-media"
+                  title="In-App Preview"
+                />
+              ) : (
+                <div className="m-auto text-center text-white p-6 max-w-md">
+                  <span className="text-4xl">⚠️</span>
+                  <h5 className="font-bold text-lg mt-2">Impossible d'intégrer l'aperçu</h5>
+                  <p className="text-xs text-slate-400 mt-1">L'URL fournie ne supporte pas le rendu intégré.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Explanations / Interactive Info Bar */}
+            <div className="p-4.5 px-6 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+              <span className="flex items-center gap-2 font-medium">
+                💡 <span className="font-semibold text-slate-700">Lecture fluide:</span> Vous pouvez écouter, regarder ou lire sans quitter votre tableau de bord.
+              </span>
+              <p className="text-[11px] text-slate-400 font-mono">
+                {selectedResourceForPreview.type === 'nblm' || selectedResourceForPreview.type === 'studi' 
+                  ? "Note: Si NotebookLM est bloqué par vos cookies de sécurité, utilisez le bouton d'ouverture externe."
+                  : "Lecteur basé sur les services Google Drive Cloud."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modern Compact Floating Navigation Footer */}
       <footer className="mt-20 border-t border-slate-200 py-10 bg-white text-center text-xs text-slate-500">

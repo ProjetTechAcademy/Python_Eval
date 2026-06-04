@@ -9,6 +9,7 @@ interface ResourcePlayerProps {
   url?: string;
   type: 'audio' | 'slide' | 'video' | 'image' | 'nblm' | 'studi';
   zone: 'A' | 'B' | 'common';
+  onPreviewInApp?: (resource: { title: string; resourceName: string; url: string; type: string; ficheId: number }) => void;
 }
 
 export default function ResourcePlayer({
@@ -17,7 +18,8 @@ export default function ResourcePlayer({
   resourceName,
   url,
   type,
-  zone
+  zone,
+  onPreviewInApp
 }: ResourcePlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -81,17 +83,28 @@ export default function ResourcePlayer({
           </div>
         </div>
 
-        {/* Action Link to the original items */}
-        <a
-          href={url}
-          target="_blank"
-          referrerPolicy="no-referrer"
-          rel="noopener noreferrer"
-          className="p-1 px-2.5 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-all text-xs flex items-center gap-1 font-medium border border-slate-200"
-          id={`resource-url-link-${ficheId}-${type}`}
-        >
-          Ouvrir <ExternalLink className="w-3 h-3" />
-        </a>
+        {/* Action Link to the original items with in-app viewer options */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 shrink-0">
+          {onPreviewInApp && (
+            <button
+              onClick={() => onPreviewInApp({ title: ficheTitle, resourceName, url, type, ficheId })}
+              className="p-1 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-xs flex items-center justify-center gap-1 font-bold cursor-pointer shadow-sm hover:shadow-md"
+              id={`btn-read-in-app-${ficheId}-${type}`}
+            >
+              <span>👁️ {type === 'audio' ? 'Écouter' : 'Lire'}</span>
+            </button>
+          )}
+          <a
+            href={url}
+            target="_blank"
+            referrerPolicy="no-referrer"
+            rel="noopener noreferrer"
+            className="p-1 px-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg transition-all text-xs flex items-center justify-center gap-1 font-medium border border-slate-200"
+            id={`resource-url-link-${ficheId}-${type}`}
+          >
+            <span>Ouvrir</span> <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+          </a>
+        </div>
       </div>
 
       {/* Embedded interactive players depending on content block type */}
