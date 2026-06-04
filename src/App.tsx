@@ -600,8 +600,10 @@ export default function App() {
                   {/* Main Grid Content Row */}
                   <div className="flex flex-col xl:flex-row gap-8 w-full">
                     
-                    {/* LEFT COLUMN: Metadata, Title, and Interactive Status Selector */}
-                    <div className="flex-1 flex flex-col justify-between min-w-[280px]">
+                    {/* LEFT SECTION (Title + Actions + Status) - Spans flex-1 for wide desktop layouts */}
+                    <div className="flex-1 flex flex-col justify-between gap-6 min-w-[280px]">
+                      
+                      {/* Metadata badge and descriptive title */}
                       <div>
                         {/* Topic identifier header */}
                         <div className="flex items-center justify-between gap-2 mb-3">
@@ -613,13 +615,36 @@ export default function App() {
                           </span>
                         </div>
 
-                        <h3 className="font-black text-slate-900 text-lg md:text-xl leading-snug mt-2 text-balance">
+                        <h3 className="font-extrabold text-slate-900 text-lg md:text-xl lg:text-2xl leading-tight mt-2 text-balance">
                           {fiche.title}
                         </h3>
                       </div>
 
+                      {/* Textual Actions (Immediate Action & Motors connection) placed SIDE-BY-SIDE to eliminate wasted vertical space */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Action Block */}
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:bg-slate-50/85 transition-all flex flex-col justify-between min-h-[140px]">
+                          <p className="text-[11px] uppercase tracking-wider font-extrabold text-slate-500 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                            ⚡ Action immédiate (Zéro BlaBla)
+                          </p>
+                          <p className="text-sm text-slate-800 font-medium mt-2 leading-relaxed flex-1">
+                            {fiche.action}
+                          </p>
+                        </div>
+
+                        {/* M-Motors project connection link */}
+                        <div className="p-4 bg-indigo-50/30 border border-indigo-100/60 rounded-2xl hover:bg-indigo-50/50 transition-all flex flex-col justify-between min-h-[140px]">
+                          <p className="text-[11px] uppercase tracking-wider font-extrabold text-indigo-700 flex items-center gap-1.5 border-b border-indigo-150 pb-2">
+                            🎯 Lien avec Devoir M-Motors
+                          </p>
+                          <p className="text-xs text-slate-600 italic mt-2 leading-relaxed font-mono flex-1">
+                            {fiche.motorsLink}
+                          </p>
+                        </div>
+                      </div>
+
                       {/* Interactive Status Selector Bar */}
-                      <div className="mt-6 pt-4 border-t border-slate-100">
+                      <div className="pt-4 border-t border-slate-100">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
                           <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1">
                             🟢 Statut de validation ({activeZone === 'A' ? 'Zone A - Vous' : 'Zone B - Jury'}):
@@ -655,31 +680,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* MIDDLE COLUMN: Textual Actions (Immediate Action & Motors connection) */}
-                    <div className="flex-1 flex flex-col justify-between gap-4 min-w-[280px]">
-                      {/* Action Block */}
-                      <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:bg-slate-50/80 transition-all flex-1">
-                        <p className="text-[11px] uppercase tracking-wider font-black text-slate-500 flex items-center gap-1.5 border-b border-slate-200 pb-2.5">
-                          ⚡ Action immédiate (Zéro BlaBla)
-                        </p>
-                        <p className="text-sm text-slate-850 font-medium mt-3 leading-relaxed">
-                          {fiche.action}
-                        </p>
-                      </div>
-
-                      {/* M-Motors project connection link */}
-                      <div className="p-4 bg-indigo-50/40 border border-indigo-100/80 rounded-2xl hover:bg-indigo-50/60 transition-all flex-1">
-                        <p className="text-[11px] uppercase tracking-wider font-black text-indigo-700 flex items-center gap-1.5 border-b border-indigo-150 pb-2.5">
-                          🎯 Lien avec Devoir M-Motors
-                        </p>
-                        <p className="text-sm text-slate-700 italic mt-3 leading-relaxed">
-                          {fiche.motorsLink}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* RIGHT COLUMN: Resources Grid (Filtered strictly based on activeZone Tab) */}
-                    <div className="w-full xl:w-[420px] shrink-0 xl:border-l border-slate-100 pt-6 xl:pt-0 xl:pl-6 flex flex-col justify-between gap-4">
+                    {/* RIGHT COLUMN: Resources Grid (Filtered strictly based on activeZone Tab, with custom spacing for balanced layouts) */}
+                    <div className="w-full xl:w-[410px] shrink-0 xl:border-l border-slate-200/60 pt-6 xl:pt-0 xl:pl-6 flex flex-col justify-between gap-4">
                       <div>
                         <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-1">
                           📦 Supports & Ressources (Zone {activeZone}) :
