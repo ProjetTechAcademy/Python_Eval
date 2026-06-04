@@ -577,7 +577,7 @@ export default function App() {
             <p className="text-xs text-slate-500 mt-1">Ajustez les termes de recherche ou la thématique de filtre.</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-4">
             {filteredFiches.map(fiche => {
               const currentStatus = activeZone === 'A' ? fiche.status1 : fiche.status2;
               const completedDate = activeZone === 'A' ? fiche.date1 : fiche.date2;
@@ -585,12 +585,12 @@ export default function App() {
               return (
                 <div 
                   key={fiche.id}
-                  className={`bg-white rounded-[2.2rem] border-2 shadow-sm p-6 lg:p-8 flex flex-col gap-6 relative overflow-hidden transition-all duration-300 ring-4 ring-slate-100/50 ${
+                  className={`bg-white rounded-2xl border-2 shadow-sm p-4 lg:p-5 flex flex-col gap-3.5 relative overflow-hidden transition-all duration-300 ring-2 ring-slate-100/50 ${
                     activeZone === 'A' ? 'border-blue-500/80 hover:border-blue-500' : 'border-red-500/80 hover:border-red-500'
                   }`}
                 >
                   {/* Top multi-color strip for Google Brand aesthetic */}
-                  <div className="absolute top-0 left-0 w-full h-[5px] flex">
+                  <div className="absolute top-0 left-0 w-full h-[4px] flex">
                     <div className="flex-1 h-full bg-[#4285F4]" />
                     <div className="flex-1 h-full bg-[#EA4335]" />
                     <div className="flex-1 h-full bg-[#FBBC05]" />
@@ -598,79 +598,79 @@ export default function App() {
                   </div>
 
                   {/* Main Grid Content Row */}
-                  <div className="flex flex-col xl:flex-row gap-8 w-full">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 w-full items-start">
                     
-                    {/* LEFT SECTION (Title + Actions + Status) - Spans flex-1 for wide desktop layouts */}
-                    <div className="flex-1 flex flex-col justify-between gap-6 min-w-[280px]">
+                    {/* LEFT SECTION (Title + Actions + Status) - Spans lg:col-span-7 */}
+                    <div className="lg:col-span-7 flex flex-col justify-start gap-4">
                       
                       {/* Metadata badge and descriptive title */}
                       <div>
                         {/* Topic identifier header */}
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <span className="px-3 py-1 bg-slate-100 border border-slate-200 rounded-full text-[11px] font-black text-slate-600 uppercase tracking-wide">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="px-2.5 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-[10px] font-black text-slate-600 uppercase tracking-wide">
                             {fiche.topic}
                           </span>
-                          <span className="text-xs font-mono font-bold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-150">
+                          <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-150">
                             N° {fiche.id}
                           </span>
                         </div>
 
-                        <h3 className="font-extrabold text-slate-900 text-lg md:text-xl lg:text-2xl leading-tight mt-2 text-balance">
+                        <h3 className="font-extrabold text-slate-900 text-base md:text-lg lg:text-xl leading-tight mt-1 text-balance">
                           {fiche.title}
                         </h3>
                       </div>
 
-                      {/* Textual Actions (Immediate Action & Motors connection) placed SIDE-BY-SIDE to eliminate wasted vertical space */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Textual Actions (Immediate Action & Motors connection) placed SIDE-BY-SIDE to eliminate wasted space */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {/* Action Block */}
-                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:bg-slate-50/85 transition-all flex flex-col justify-between min-h-[140px]">
-                          <p className="text-[11px] uppercase tracking-wider font-extrabold text-slate-500 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-50/85 transition-all flex flex-col justify-between">
+                          <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-500 flex items-center gap-1 border-b border-slate-150 pb-1 mb-1.5">
                             ⚡ Action immédiate (Zéro BlaBla)
                           </p>
-                          <p className="text-sm text-slate-800 font-medium mt-2 leading-relaxed flex-1">
+                          <p className="text-xs text-slate-800 font-medium leading-relaxed flex-1">
                             {fiche.action}
                           </p>
                         </div>
 
                         {/* M-Motors project connection link */}
-                        <div className="p-4 bg-indigo-50/30 border border-indigo-100/60 rounded-2xl hover:bg-indigo-50/50 transition-all flex flex-col justify-between min-h-[140px]">
-                          <p className="text-[11px] uppercase tracking-wider font-extrabold text-indigo-700 flex items-center gap-1.5 border-b border-indigo-150 pb-2">
+                        <div className="p-3 bg-indigo-50/20 border border-indigo-100/60 rounded-xl hover:bg-indigo-50/40 transition-all flex flex-col justify-between">
+                          <p className="text-[10px] uppercase tracking-wider font-extrabold text-indigo-750 flex items-center gap-1 border-b border-indigo-150 pb-1 mb-1.5">
                             🎯 Lien avec Devoir M-Motors
                           </p>
-                          <p className="text-xs text-slate-600 italic mt-2 leading-relaxed font-mono flex-1">
+                          <p className="text-xs text-slate-600 italic leading-relaxed font-mono flex-1">
                             {fiche.motorsLink}
                           </p>
                         </div>
                       </div>
 
                       {/* Interactive Status Selector Bar */}
-                      <div className="pt-4 border-t border-slate-100">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
-                          <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                      <div className="pt-3 border-t border-slate-100">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 gap-2">
+                          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1">
                             🟢 Statut de validation ({activeZone === 'A' ? 'Zone A - Vous' : 'Zone B - Jury'}):
                           </span>
                           {completedDate && (
-                            <span className="text-[10px] text-emerald-750 font-black flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full animate-pulse">
-                              <Calendar className="w-3 h-3 text-emerald-600" /> Validé le {completedDate}
+                            <span className="text-[9px] text-emerald-750 font-black flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                              <Calendar className="w-2.5 h-2.5 text-emerald-600" /> Validé le {completedDate}
                             </span>
                           )}
                         </div>
                         
-                        <div className="grid grid-cols-3 gap-2 bg-slate-100 p-1.5 rounded-2xl">
+                        <div className="grid grid-cols-3 gap-1.5 bg-slate-100/80 p-1 rounded-xl">
                           {(['A faire', 'En cours', 'Fait'] as FicheStatus[]).map(status => {
                             const isActive = currentStatus === status;
                             const getStatusStyle = () => {
-                              if (!isActive) return 'text-slate-600 hover:bg-white/60';
-                              if (status === 'Fait') return activeZone === 'A' ? 'bg-[#4285F4] text-white font-black shadow-md' : 'bg-[#EA4335] text-white font-black shadow-md';
-                              if (status === 'En cours') return 'bg-[#FBBC05] text-[#1e293b] font-black shadow-md';
-                              return 'bg-slate-400 text-white font-black shadow-md';
+                              if (!isActive) return 'text-slate-650 hover:bg-white/60';
+                              if (status === 'Fait') return activeZone === 'A' ? 'bg-[#4285F4] text-white font-black shadow-sm' : 'bg-[#EA4335] text-white font-black shadow-sm';
+                              if (status === 'En cours') return 'bg-[#FBBC05] text-[#1e293b] font-black shadow-sm';
+                              return 'bg-slate-400 text-white font-black shadow-sm';
                             };
 
                             return (
                               <button
                                 key={status}
                                 onClick={() => handleStatusChange(fiche.id, activeZone, status)}
-                                className={`py-2 rounded-xl text-[11px] text-center select-none cursor-pointer tracking-tight transition-all font-bold ${getStatusStyle()}`}
+                                className={`py-1.5 rounded-lg text-[10.5px] text-center select-none cursor-pointer tracking-tight transition-all font-bold ${getStatusStyle()}`}
                               >
                                 {status === 'Fait' ? 'Fait ✔' : status === 'En cours' ? 'En cours ⏳' : 'À faire 💤'}
                               </button>
@@ -680,26 +680,26 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* RIGHT COLUMN: Resources Grid (Filtered strictly based on activeZone Tab, with custom spacing for balanced layouts) */}
-                    <div className="w-full xl:w-[410px] shrink-0 xl:border-l border-slate-200/60 pt-6 xl:pt-0 xl:pl-6 flex flex-col justify-between gap-4">
+                    {/* RIGHT COLUMN: Resources Grid - Spans lg:col-span-5 */}
+                    <div className="w-full lg:col-span-5 lg:border-l border-slate-200/60 pt-4 lg:pt-0 lg:pl-4 flex flex-col justify-start gap-2.5">
                       <div>
-                        <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-1">
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
                           📦 Supports & Ressources (Zone {activeZone}) :
                         </p>
                         
                         {/* Common File (PDF) with edit / custom link options */}
                         {fiche.coursFile && (
-                          <div className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-2xl flex flex-col gap-2.5 transition-all mb-4 shadow-sm">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="font-bold text-slate-800 line-clamp-1 flex items-center gap-1.5" title={fiche.coursFile}>
-                                📂 <span className="font-mono text-[11px] text-slate-700">{fiche.coursFile}</span>
+                          <div className="p-2 bg-slate-50 hover:bg-slate-100/85 border border-slate-200 rounded-xl flex flex-col gap-1.5 transition-all mb-2 shadow-sm">
+                            <div className="flex items-center justify-between text-[10px] gap-2">
+                              <span className="font-bold text-slate-800 truncate flex items-center gap-1" title={fiche.coursFile}>
+                                📂 <span className="font-mono text-[10px] text-slate-700">{fiche.coursFile}</span>
                               </span>
-                              <span className="text-[10px] text-[#4285F4] bg-blue-50 border border-blue-100/50 px-2.5 py-0.5 rounded-full font-sans font-black uppercase shrink-0">
+                              <span className="text-[8px] text-[#4285F4] bg-blue-50 border border-blue-100/50 px-1.5 py-0.5 rounded-md font-sans font-black uppercase shrink-0">
                                 Support PDF
                               </span>
                             </div>
 
-                            <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
+                            <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
                               {fiche.coursFileUrl || fiche.coursFile.startsWith('http') ? (
                                 <button
                                   onClick={() => setSelectedResourceForPreview({
@@ -709,33 +709,33 @@ export default function App() {
                                     type: 'slide',
                                     ficheId: fiche.id
                                   })}
-                                  className="p-1 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-[11px] flex items-center gap-1 font-bold cursor-pointer"
+                                  className="p-0.5 px-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-all text-[10px] flex items-center gap-1 font-bold cursor-pointer"
                                 >
-                                  <span>👁️ Lire directement</span>
+                                  <span>👁️ Lire</span>
                                 </button>
                               ) : (
-                                <span className="text-[10px] text-slate-400 italic">Lien non configuré</span>
+                                <span className="text-[9px] text-slate-400 italic">Lien non configuré</span>
                               )}
 
                               <button
                                 onClick={() => setEditingPdfFicheId(editingPdfFicheId === fiche.id ? null : fiche.id)}
-                                className="text-[10px] text-blue-600 hover:text-blue-700 hover:underline font-bold transition-all"
+                                className="text-[8px] text-blue-600 hover:text-blue-750 font-bold hover:underline transition-all"
                               >
-                                {fiche.coursFileUrl || fiche.coursFile.startsWith('http') ? '✏️ Modifier le lien' : '🔗 Lier un PDF Google Drive'}
+                                {fiche.coursFileUrl || fiche.coursFile.startsWith('http') ? '✏️ Modifier' : '🔗 Lier un PDF'}
                               </button>
                             </div>
 
                             {/* Quick inline URL associator */}
                             {editingPdfFicheId === fiche.id && (
-                              <div className="pt-2.5 border-t border-slate-200 text-xs flex flex-col gap-1.5 animate-fadeIn">
-                                <p className="font-semibold text-slate-750">Insérez l'URL Google Drive du PDF :</p>
+                              <div className="pt-2 border-t border-slate-200 text-[10px] flex flex-col gap-1 animate-fadeIn">
+                                <p className="font-semibold text-slate-700">Lien Google Drive du PDF :</p>
                                 <div className="flex gap-1.5">
                                   <input 
                                     type="text" 
                                     placeholder="https://drive.google.com/..." 
                                     id={`input-pdf-link-${fiche.id}`}
                                     defaultValue={fiche.coursFileUrl || (fiche.coursFile.startsWith('http') ? fiche.coursFile : '')}
-                                    className="flex-1 p-1.5 px-2.5 text-xs bg-white border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-none text-slate-800"
+                                    className="flex-1 p-1 px-2 text-[10px] bg-white border border-slate-250 rounded-md focus:border-blue-500 focus:outline-none text-slate-800"
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') {
                                         const val = e.currentTarget.value;
@@ -748,30 +748,27 @@ export default function App() {
                                       const el = document.getElementById(`input-pdf-link-${fiche.id}`) as HTMLInputElement;
                                       if (el && el.value) handleAssignPdfUrl(fiche.id, el.value);
                                     }}
-                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shrink-0 transition-colors cursor-pointer"
+                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[10px] font-bold shrink-0 transition-colors cursor-pointer"
                                   >
                                     OK
                                   </button>
                                 </div>
-                                <p className="text-[9px] text-slate-450 leading-relaxed">
-                                  Ouvrez le PDF sur Google Drive &gt; Partager &gt; Obtenir le lien (Accès tous publics) &gt; Collez-le ici.
-                                </p>
                               </div>
                             )}
                           </div>
                         )}
 
                         {/* Display ONLY activeZone resource block */}
-                        <div className="space-y-4">
+                        <div>
                           {activeZone === 'A' ? (
                             /* Zone A Resource block */
                             (fiche.audio1 || fiche.slide1 || fiche.video1 || fiche.image1 || fiche.nblm1) && (
-                              <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-3.5">
-                                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2 flex items-center justify-between">
+                              <div className="bg-blue-50/10 border border-blue-100/40 rounded-xl p-2">
+                                <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1.5 flex items-center justify-between">
                                   <span>Zone A • Évaluations (Moi)</span>
-                                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-tight">Zone A</span>
+                                  <span className="bg-blue-100 text-blue-700 px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-tight">Zone A</span>
                                 </p>
-                                <div className="space-y-2">
+                                <div className="space-y-1">
                                   {fiche.audio1 && (
                                     <ResourcePlayer 
                                       ficheId={fiche.id} 
@@ -833,12 +830,12 @@ export default function App() {
                           ) : (
                             /* Zone B Resource block */
                             (fiche.audio2 || fiche.slide2 || fiche.video2 || fiche.image2 || fiche.nblm2) && (
-                              <div className="bg-red-50/50 border border-red-100 rounded-2xl p-3.5">
-                                <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-2 flex items-center justify-between">
-                                  <span>Zone B • Retour Jury / Soutenance</span>
-                                  <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-tight">Zone B</span>
+                              <div className="bg-red-50/10 border border-red-100/40 rounded-xl p-2">
+                                <p className="text-[9px] font-black text-red-600 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                                  <span>Zone B • Retour Jury</span>
+                                  <span className="bg-red-100 text-red-700 px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-tight">Zone B</span>
                                 </p>
-                                <div className="space-y-2">
+                                <div className="space-y-1">
                                   {fiche.audio2 && (
                                     <ResourcePlayer 
                                       ficheId={fiche.id} 
@@ -903,7 +900,7 @@ export default function App() {
 
                       {/* Default studi module support */}
                       {fiche.studi && (
-                        <div className="mt-2">
+                        <div className="mt-1">
                           <ResourcePlayer 
                             ficheId={fiche.id} 
                             ficheTitle={fiche.title} 
