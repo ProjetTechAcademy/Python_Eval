@@ -1,0 +1,6 @@
+{
+  "name": "Suivi Évaluation & Jury M-Motors",
+  "description": "Tableau de bord interactif 3D de comparaison du progrès de l'évaluation et de la réponse au jury pour le projet d'études M-Motors.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
