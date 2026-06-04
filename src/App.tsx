@@ -953,21 +953,40 @@ export default function App() {
 
                       {/* Display content inside card */}
                       {selectedResourceForPreview.type === 'audio' ? (
-                        <div className="p-6 bg-gradient-to-br from-emerald-950/40 to-slate-900 rounded-xl border border-emerald-500/10 flex flex-col items-center justify-center gap-4 text-center">
-                          <div className="p-3 bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30">
-                            <Volume2 className="w-8 h-8" />
+                        <div className="w-full flex flex-col gap-3">
+                          <div className="p-4 bg-emerald-950/30 rounded-xl border border-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-center sm:text-left">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2.5 bg-emerald-500/10 text-emerald-300 rounded-full border border-emerald-500/20">
+                                <Volume2 className="w-5 h-5 animate-pulse" />
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-bold text-slate-100">{selectedResourceForPreview.resourceName}</h5>
+                                <p className="text-[10px] text-slate-400">Lecteur officiel Google Drive intégré &bull; Lecture directe</p>
+                              </div>
+                            </div>
+                            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-mono self-center">
+                              GOOGLE DRIVE AUDIO
+                            </span>
                           </div>
-                          <div>
-                            <h5 className="text-sm font-bold text-slate-100">{selectedResourceForPreview.resourceName}</h5>
-                            <p className="text-[10px] text-slate-400 mt-0.5">En cours de lecture directe inside-app</p>
-                          </div>
-                          <audio 
-                            src={selectedResourceForPreview.url} 
-                            controls 
-                            autoPlay
-                            className="w-full max-w-lg mt-2 bg-slate-900 border border-slate-700 text-white rounded-lg outline-none"
-                          />
-                          <p className="text-[9px] text-slate-500 italic">Format de transmission audio hébergé sur Google Drive Cloud</p>
+                          {getDriveEmbedUrl(selectedResourceForPreview.url) ? (
+                            <div className="w-full h-[180px] sm:h-[220px] relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 shadow-inner">
+                              <iframe 
+                                src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
+                                className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
+                                allow="autoplay; encrypted-media"
+                                title="In-App Audio Player"
+                              />
+                            </div>
+                          ) : (
+                            <div className="p-4 bg-slate-900 rounded-xl border border-slate-800">
+                              <audio 
+                                src={selectedResourceForPreview.url} 
+                                controls 
+                                autoPlay
+                                className="w-full outline-none"
+                              />
+                            </div>
+                          )}
                         </div>
                       ) : getDriveEmbedUrl(selectedResourceForPreview.url) ? (
                         <div className="w-full h-[450px] relative rounded-xl overflow-hidden bg-slate-905 border border-slate-800">
