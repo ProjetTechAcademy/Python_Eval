@@ -27,6 +27,8 @@ import {
   Clock,
   AlertCircle,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   TrendingUp,
   RotateCcw,
   Check,
@@ -38,7 +40,11 @@ import {
   Flame,
   User,
   Heart,
-  ExternalLink
+  ExternalLink,
+  Layers,
+  Grid,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 
 function getDriveEmbedUrl(url: string | undefined): string | null {
@@ -134,6 +140,35 @@ export default function App() {
 
   const [editingPdfFicheId, setEditingPdfFicheId] = useState<number | null>(null);
   const [selectedSpeechFiche, setSelectedSpeechFiche] = useState<Fiche | null>(null);
+
+  // New features for Blocks and Modules isolation & navigation
+  const [selectedBlock, setSelectedBlock] = useState<string>('All');
+  const [selectedModule, setSelectedModule] = useState<string>('All');
+  const [viewMode, setViewMode] = useState<'continue' | 'segmented'>(() => {
+    const localMode = localStorage.getItem('m-motors-view-mode');
+    return (localMode as 'continue' | 'segmented') || 'segmented'; // Default to organized segmented view for easy navigation
+  });
+
+  const [expandedBlocks, setExpandedBlocks] = useState<Record<string, boolean>>({
+    'B0': true,
+    'B1': true,
+    'B2': true,
+    'B3': true,
+    'B4': true,
+    'B5': true,
+  });
+
+  const toggleBlockExpanded = (blockCode: string) => {
+    setExpandedBlocks(prev => ({
+      ...prev,
+      [blockCode]: !prev[blockCode]
+    }));
+  };
+
+  // Keep view preference
+  useEffect(() => {
+    localStorage.setItem('m-motors-view-mode', viewMode);
+  }, [viewMode]);
 
   const handleAssignPdfUrl = (id: number, url: string) => {
     setFiches(prev => prev.map(f => {
@@ -246,6 +281,37 @@ export default function App() {
   // Domain Category listing
   const topics = ['All', 'HTML & CSS', 'Bootstrap', 'Bases de Données', 'Python Backend', 'Python Quality & Flask', 'APIs, Git & Sécurité'];
 
+  // Dynamically extract all available Blocks & Modules from fiches
+  const { blocksList, modulesList } = useMemo(() => {
+    const blocks = new Set<string>();
+    const modules = new Set<string>();
+
+    fiches.forEach(f => {
+      const title = f.title || '';
+      const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
+      const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
+      if (bMatch) blocks.add(`B${bMatch[1]}`);
+      if (mMatch) modules.add(`M${mMatch[1]}`);
+    });
+
+    const sortedBlocks = Array.from(blocks).sort((a, b) => {
+      const numA = parseInt(a.slice(1), 10);
+      const numB = parseInt(b.slice(1), 10);
+      return numA - numB;
+    });
+
+    const sortedModules = Array.from(modules).sort((a, b) => {
+      const numA = parseInt(a.slice(1), 10);
+      const numB = parseInt(b.slice(1), 10);
+      return numA - numB;
+    });
+
+    return {
+      blocksList: ['All', ...sortedBlocks],
+      modulesList: ['All', ...sortedModules]
+    };
+  }, [fiches]);
+
   // Sub-filter core
   const filteredFiches = useMemo(() => {
     return fiches.filter(f => {
@@ -253,6 +319,15 @@ export default function App() {
       const fStatus = activeZone === 'A' ? f.status1 : activeZone === 'B' ? f.status2 : (f.status3 || 'A faire');
       const matchesStatus = selectedStatus === 'All' || fStatus === selectedStatus;
       
+      const title = f.title || '';
+      const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
+      const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
+      const blockCode = bMatch ? `B${bMatch[1]}` : 'Autre';
+      const moduleCode = mMatch ? `M${mMatch[1]}` : 'Autre';
+
+      const matchesBlock = selectedBlock === 'All' || blockCode === selectedBlock;
+      const matchesModule = selectedModule === 'All' || moduleCode === selectedModule;
+
       const query = searchQuery.toLowerCase();
       const matchesSearch = searchQuery === '' || 
         f.id.toString().includes(query) ||
@@ -260,9 +335,56 @@ export default function App() {
         f.action.toLowerCase().includes(query) ||
         f.motorsLink.toLowerCase().includes(query);
 
-      return matchesTopic && matchesStatus && matchesSearch;
+      return matchesTopic && matchesStatus && matchesSearch && matchesBlock && matchesModule;
     });
-  }, [fiches, activeZone, selectedTopic, selectedStatus, searchQuery]);
+  }, [fiches, activeZone, selectedTopic, selectedStatus, searchQuery, selectedBlock, selectedModule]);
+
+  // Highly optimized grouping by Block and Module for nested view
+  const fichesGroupedByBlockAndModule = useMemo(() => {
+    const map: Record<string, Record<string, Fiche[]>> = {};
+
+    filteredFiches.forEach(f => {
+      const title = f.title || '';
+      const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
+      const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
+      const blockCode = bMatch ? `B${bMatch[1]}` : 'Autre';
+      const moduleCode = mMatch ? `M${mMatch[1]}` : 'Autre';
+
+      if (!map[blockCode]) {
+        map[blockCode] = {};
+      }
+      if (!map[blockCode][moduleCode]) {
+        map[blockCode][moduleCode] = [];
+      }
+      map[blockCode][moduleCode].push(f);
+    });
+
+    // Sort blocks. Format: "B3" or "Autre"
+    return Object.keys(map).sort((a, b) => {
+      if (a === 'Autre') return 1;
+      if (b === 'Autre') return -1;
+      const numA = parseInt(a.slice(1), 10);
+      const numB = parseInt(b.slice(1), 10);
+      return numA - numB;
+    }).map(blockCode => {
+      const moduleMap = map[blockCode];
+      const modules = Object.keys(moduleMap).sort((a, b) => {
+        if (a === 'Autre') return 1;
+        if (b === 'Autre') return -1;
+        const numA = parseInt(a.slice(1), 10);
+        const numB = parseInt(b.slice(1), 10);
+        return numA - numB;
+      }).map(moduleCode => ({
+        moduleCode,
+        fiches: moduleMap[moduleCode]
+      }));
+
+      return {
+        blockCode,
+        modules
+      };
+    });
+  }, [filteredFiches]);
 
   // Recharts trend visualizer comparing Zone A, Zone B and Zone C metrics by category
   const comparisonChartData = useMemo(() => {
@@ -289,6 +411,574 @@ export default function App() {
     { name: 'Étape 5: Flask & Dev', 'Ma Réponse': 88, 'Retour Jury': 65, 'Zone C': 75 },
     { name: 'Étape 6: Projet Final', 'Ma Réponse': stats1.pct, 'Retour Jury': stats2.pct, 'Zone C (Commun)': stats3.pct },
   ];
+
+  const renderFicheCard = (fiche: Fiche) => {
+    const currentStatus = activeZone === 'A' ? fiche.status1 : activeZone === 'B' ? fiche.status2 : (fiche.status3 || 'A faire');
+    const completedDate = activeZone === 'A' ? fiche.date1 : activeZone === 'B' ? fiche.date2 : fiche.date3;
+    const isCompleted = currentStatus === 'Fait';
+    const isEnCours = currentStatus === 'En cours';
+
+    return (
+      <div 
+        key={fiche.id}
+        className={`bg-white rounded-2xl border-2 shadow-sm p-4 lg:p-5 flex flex-col gap-3.5 relative overflow-hidden transition-all duration-300 ring-2 hover:scale-[1.005] hover:shadow-md ${getTopicLeftBorder(fiche.topic)} ${
+          isCompleted
+            ? 'border-[#34A853] bg-[#34A853]/[0.015] ring-[#34A853]/10 shadow-[0_4px_15px_-3px_rgba(52,168,83,0.15)]' 
+            : isEnCours
+              ? 'border-[#FBBC05] bg-[#FBBC05]/[0.01] ring-[#FBBC05]/10 shadow-[0_4px_12px_-3px_rgba(251,188,5,0.1)]'
+              : (activeZone === 'A' ? 'border-blue-500/40 hover:border-blue-500 ring-slate-100/50' : activeZone === 'B' ? 'border-red-500/40 hover:border-red-500 ring-slate-100/20' : 'border-emerald-500/40 hover:border-emerald-500 ring-slate-100/10')
+        }`}
+      >
+        {/* Top multi-color strip for Google Brand aesthetic */}
+        <div className="absolute top-0 left-0 w-full h-[4px] flex">
+          <div className="flex-1 h-full bg-[#4285F4]" />
+          <div className="flex-1 h-full bg-[#EA4335]" />
+          <div className="flex-1 h-full bg-[#FBBC05]" />
+          <div className="flex-1 h-full bg-[#34A853]" />
+        </div>
+
+        {/* Main Grid Content Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 w-full items-start">
+          
+          {/* LEFT SECTION (Title + Actions + Status) - Spans lg:col-span-7 */}
+          <div className="lg:col-span-7 flex flex-col justify-start gap-4">
+            
+            {/* Metadata badge and descriptive title */}
+            <div>
+              {/* Topic identifier header */}
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-1.5 flex-wrap pb-1 md:pb-0">
+                  <span className={`px-2.5 py-0.5 border rounded-full text-[10px] font-black uppercase tracking-wide transition-all duration-300 ${getTopicBadgeStyle(fiche.topic)}`}>
+                    {fiche.topic}
+                  </span>
+                  {isCompleted && (
+                    <span className="text-[9px] bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse flex items-center gap-0.5">
+                      <Sparkles className="w-2.5 h-2.5" /> VALIDÉ
+                    </span>
+                  )}
+                  {/* Codified Badge indicators */}
+                  {(() => {
+                    const blockMatch = (fiche.title || '').match(/(?:_|\b)B(\d+)(?:_|\b)/i);
+                    const moduleMatch = (fiche.title || '').match(/(?:_|\b)M(\d+)(?:_|\b)/i);
+                    return (
+                      <>
+                        {blockMatch && (
+                          <span className="text-[9.5px] font-black tracking-wider text-blue-700 bg-blue-50 border border-blue-200/50 px-2.5 py-0.5 rounded-full uppercase">
+                            BLOC {blockMatch[1]}
+                          </span>
+                        )}
+                        {moduleMatch && (
+                          <span className="text-[9.5px] font-black tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200/50 px-2.5 py-0.5 rounded-full uppercase">
+                            MOD {moduleMatch[1]}
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => setSelectedSpeechFiche(fiche)}
+                    className="px-2 py-0.5 bg-gradient-to-r from-[#4285F4] to-indigo-600 hover:from-blue-600 hover:to-indigo-750 text-white rounded-md text-[10px] font-black uppercase tracking-wider flex items-center gap-1 hover:scale-105 active:scale-95 transition-all shadow-sm cursor-pointer select-none"
+                    title="Écouter le résumé de la fiche à haute voix"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" /> Écouter 🔊
+                  </button>
+                  <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-150">
+                    N° {fiche.id}
+                  </span>
+                </div>
+              </div>
+
+              <h3 className="font-extrabold text-slate-900 text-sm sm:text-base md:text-lg leading-snug mt-1 text-balance">
+                {fiche.title}
+              </h3>
+            </div>
+
+            {/* Textual Actions (Immediate Action & Motors connection) placed SIDE-BY-SIDE to eliminate wasted space */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Action Block */}
+              <div className="p-3 bg-amber-500/[0.02] border border-slate-200 border-l-[3.5px] border-l-amber-500 rounded-xl hover:bg-amber-500/[0.05] transition-all flex flex-col justify-between shadow-sm">
+                <p className="text-[10px] uppercase tracking-wider font-extrabold text-amber-600 flex items-center gap-1 border-b border-amber-100 pb-1 mb-1.5">
+                  ⚡ Action immédiate (Zéro BlaBla)
+                </p>
+                <p className="text-xs text-slate-800 font-medium leading-relaxed flex-1">
+                  {fiche.action}
+                </p>
+              </div>
+
+              {/* M-Motors project connection link */}
+              <div className="p-3 bg-indigo-500/[0.02] border border-indigo-150 border-l-[3.5px] border-l-indigo-500 rounded-xl hover:bg-indigo-500/[0.05] transition-all flex flex-col justify-between shadow-sm">
+                <p className="text-[10px] uppercase tracking-wider font-extrabold text-indigo-750 flex items-center gap-1 border-b border-indigo-150 pb-1 mb-1.5">
+                  🎯 Devoir M-Motors
+                </p>
+                <p className="text-xs text-slate-650 italic leading-relaxed font-mono flex-1 text-balance overflow-x-auto word-break">
+                  {fiche.motorsLink}
+                </p>
+              </div>
+            </div>
+
+            {/* Interactive Status Selector Bar */}
+            <div className="pt-3 border-t border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 gap-2">
+                <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                  🟢 Statut de validation ({activeZone === 'A' ? 'Zone A - Vous' : activeZone === 'B' ? 'Zone B - Jury' : 'Zone C - Commun'}):
+                </span>
+                {completedDate && (
+                  <span className="text-[9px] text-[#34A853] font-black flex items-center gap-1 bg-emerald-55 border border-emerald-200 px-2.5 py-0.5 rounded-full shadow-sm">
+                    <Calendar className="w-2.5 h-2.5 text-[#34A853]" /> Validé le {completedDate}
+                  </span>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-3 gap-1.5 bg-slate-100/85 p-1 rounded-xl">
+                {(['A faire', 'En cours', 'Fait'] as FicheStatus[]).map(status => {
+                  const isActive = currentStatus === status;
+                  const getStatusStyle = () => {
+                    if (!isActive) {
+                      if (status === 'Fait') return 'text-[#34A853]/90 bg-white/40 hover:bg-[#34A853]/15 hover:text-[#34A853]';
+                      if (status === 'En cours') return 'text-[#b7791f] bg-white/40 hover:bg-[#FBBC05]/20 hover:text-[#b7791f]';
+                      return 'text-[#EA4335]/90 bg-white/40 hover:bg-[#EA4335]/15 hover:text-[#EA4335]';
+                    }
+                    if (status === 'Fait') return 'bg-[#34A853] text-white font-black shadow-md scale-[1.04] ring-2 ring-[#34A853]/20';
+                    if (status === 'En cours') return 'bg-[#FBBC05] text-slate-900 font-black shadow-md scale-[1.04] ring-2 ring-[#FBBC05]/25';
+                    return 'bg-[#EA4335] text-white font-black shadow-md scale-[1.04] ring-2 ring-[#EA4335]/20';
+                  };
+
+                  return (
+                    <button
+                      key={status}
+                      onClick={() => handleStatusChange(fiche.id, activeZone, status)}
+                      className={`py-1.5 rounded-lg text-[10.5px] text-center select-none cursor-pointer tracking-tight transition-all duration-350 font-bold hover:scale-[1.02] border border-transparent ${
+                        isActive ? 'border-slate-950/5' : 'border-slate-202/40'
+                      } ${getStatusStyle()}`}
+                    >
+                      {status === 'Fait' ? 'Fait ✔' : status === 'En cours' ? 'En cours ⏳' : 'À faire 💤'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN: Resources Grid - Spans lg:col-span-5 */}
+          <div className="w-full lg:col-span-5 lg:border-l border-slate-205/60 pt-4 lg:pt-0 lg:pl-4 flex flex-col justify-start gap-2.5 flex-wrap">
+            <div>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                📦 Supports & Ressources (Zone {activeZone}) :
+              </p>
+              
+              {/* Common File (PDF) with edit / custom link options */}
+              {fiche.coursFile && (
+                <div className="p-2.5 bg-blue-500/[0.02] hover:bg-blue-500/[0.04] border border-slate-200 border-l-[3.5px] border-l-[#4285F4] rounded-xl flex flex-col gap-1.5 transition-all mb-2 shadow-sm transform hover:-translate-y-[1px]">
+                  <div className="flex items-center justify-between text-[10px] gap-2">
+                    <span className="font-bold text-slate-800 truncate flex items-center gap-1" title={fiche.coursFile}>
+                      📂 <span className="font-mono text-[10px] text-slate-705">{fiche.coursFile}</span>
+                    </span>
+                    <span className="text-[8px] text-[#4285F4] bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md font-sans font-black uppercase shrink-0">
+                      Support PDF
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                    {fiche.coursFileUrl || fiche.coursFile.startsWith('http') ? (
+                      <button
+                        onClick={() => setSelectedResourceForPreview({
+                          title: fiche.title,
+                          resourceName: "Document PDF de Support d'Étude",
+                          url: fiche.coursFileUrl || fiche.coursFile,
+                          type: 'slide',
+                          ficheId: fiche.id
+                        })}
+                        className="p-0.5 px-2.5 bg-[#4285F4] hover:bg-blue-600 text-white rounded-md transition-all text-[10px] flex items-center gap-1 font-bold cursor-pointer hover:scale-105 active:scale-95"
+                      >
+                        <span>👁️ Lire Support</span>
+                      </button>
+                    ) : (
+                      <span className="text-[9px] text-slate-400 italic">Lien non configuré</span>
+                    )}
+
+                    <button
+                      onClick={() => setEditingPdfFicheId(editingPdfFicheId === fiche.id ? null : fiche.id)}
+                      className="text-[8px] text-blue-600 hover:text-blue-755 font-extrabold hover:underline transition-all"
+                    >
+                      {fiche.coursFileUrl || fiche.coursFile.startsWith('http') ? '✏️ Modifier' : '🔗 Lier un PDF'}
+                    </button>
+                  </div>
+
+                  {/* Quick inline URL associator */}
+                  {editingPdfFicheId === fiche.id && (
+                    <div className="pt-2 border-t border-slate-200 text-[10px] flex flex-col gap-1 bento-pop bg-slate-50 p-2 rounded-xl border">
+                      <p className="font-semibold text-slate-700">Lien Google Drive du PDF :</p>
+                      <div className="flex gap-1.5">
+                        <input 
+                          type="text" 
+                          placeholder="https://drive.google.com/..." 
+                          id={`input-pdf-link-${fiche.id}`}
+                          defaultValue={fiche.coursFileUrl || (fiche.coursFile.startsWith('http') ? fiche.coursFile : '')}
+                          className="flex-1 p-1 px-2 text-[10px] bg-white border border-slate-250 rounded-md focus:border-blue-500 focus:outline-none text-slate-800"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const val = e.currentTarget.value;
+                              if (val) handleAssignPdfUrl(fiche.id, val);
+                            }
+                          }}
+                        />
+                        <button 
+                          onClick={() => {
+                            const el = document.getElementById(`input-pdf-link-${fiche.id}`) as HTMLInputElement;
+                            if (el && el.value) handleAssignPdfUrl(fiche.id, el.value);
+                          }}
+                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[10px] font-bold shrink-0 transition-colors cursor-pointer"
+                        >
+                          OK
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Display ONLY activeZone resource block */}
+              <div>
+                {activeZone === 'A' && (
+                  /* Zone A Resource block */
+                  (fiche.audio1 || fiche.slide1 || fiche.video1 || fiche.image1 || fiche.nblm1) && (
+                    <div className="bg-blue-50/10 border border-blue-150/40 rounded-xl p-2 animate-fadeIn">
+                      <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                        <span>Zone A • Évaluations (Moi)</span>
+                        <span className="bg-blue-100 text-blue-700 px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-tight">Zone A</span>
+                      </p>
+                      <div className="space-y-1">
+                        {fiche.audio1 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="Vocal d'évaluation (.m4a)" 
+                            url={fiche.audio1} 
+                            type="audio" 
+                            zone="A" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                        {fiche.slide1 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="Slides Présentation" 
+                            url={fiche.slide1} 
+                            type="slide" 
+                            zone="A" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                        {fiche.video1 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="Vidéo Explicative" 
+                            url={fiche.video1} 
+                            type="video" 
+                            zone="A" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                        {fiche.image1 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="Schémas d'Appuis" 
+                            url={fiche.image1} 
+                            type="image" 
+                            zone="A" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                        {fiche.nblm1 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="NotebookLM d'Appuis IA" 
+                            url={fiche.nblm1} 
+                            type="nblm" 
+                            zone="A" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )
+                )}
+
+                {activeZone === 'B' && (
+                  /* Zone B Resource block */
+                  (fiche.audio2 || fiche.slide2 || fiche.video2 || fiche.image2 || fiche.nblm2) && (
+                    <div className="bg-red-50/10 border border-red-150/40 rounded-xl p-2 animate-fadeIn">
+                      <p className="text-[9px] font-black text-red-600 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                        <span>Zone B • Retour Jury</span>
+                        <span className="bg-red-100 text-red-700 px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-tight">Zone B</span>
+                      </p>
+                      <div className="space-y-1">
+                        {fiche.audio2 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="Vocal Soutenance (.m4a)" 
+                            url={fiche.audio2} 
+                            type="audio" 
+                            zone="B" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                        {fiche.slide2 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="Slides Réponses Jury" 
+                            url={fiche.slide2} 
+                            type="slide" 
+                            zone="B" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                        {fiche.video2 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="Vidéo Démonstration Jury" 
+                            url={fiche.video2} 
+                            type="video" 
+                            zone="B" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                        {fiche.image2 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="Preuves & Graphiques d'Appui" 
+                            url={fiche.image2} 
+                            type="image" 
+                            zone="B" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                        {fiche.nblm2 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="NotebookLM Réponses Jury" 
+                            url={fiche.nblm2} 
+                            type="nblm" 
+                            zone="B" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )
+                )}
+
+                {activeZone === 'C' && (
+                  /* Zone C Resource block */
+                  (fiche.audio3 || fiche.slide3 || fiche.video3 || fiche.image3 || fiche.nblm3) && (
+                    <div className="bg-emerald-50/10 border border-emerald-150/40 rounded-xl p-2 animate-fadeIn">
+                      <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                        <span>Zone C • Tracés Communs</span>
+                        <span className="bg-emerald-100 text-emerald-700 px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-tight">Zone C</span>
+                      </p>
+                      <div className="space-y-1">
+                        {fiche.audio3 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="Vocal Commun (.m4a)" 
+                            url={fiche.audio3} 
+                            type="audio" 
+                            zone="C" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                        {fiche.slide3 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="Slides Base Commune" 
+                            url={fiche.slide3} 
+                            type="slide" 
+                            zone="C" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                        {fiche.video3 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="Vidéo Explicative Commune" 
+                            url={fiche.video3} 
+                            type="video" 
+                            zone="C" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                        {fiche.image3 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="Iconographies Communes" 
+                            url={fiche.image3} 
+                            type="image" 
+                            zone="C" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                        {fiche.nblm3 && (
+                          <ResourcePlayer 
+                            ficheId={fiche.id} 
+                            ficheTitle={fiche.title} 
+                            resourceName="NotebookLM Références Communes" 
+                            url={fiche.nblm3} 
+                            type="nblm" 
+                            zone="C" 
+                            onPreviewInApp={setSelectedResourceForPreview}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* Default studi module support */}
+            {fiche.studi && (
+              <div className="mt-1">
+                <ResourcePlayer 
+                  ficheId={fiche.id} 
+                  ficheTitle={fiche.title} 
+                  resourceName="Plateforme d'études Studi" 
+                  url={fiche.studi} 
+                  type="studi" 
+                  zone="common" 
+                  onPreviewInApp={setSelectedResourceForPreview}
+                />
+              </div>
+            )}
+          </div>
+
+        </div>
+
+        {/* COLLAPSIBLE INTEGRATED IN-APP PREVIEW PLAYER (ZERO WASTED SPACE, 100% RESPONSIVE WIDTH) */}
+        {selectedResourceForPreview && selectedResourceForPreview.ficheId === fiche.id && (
+          <div className="w-full mt-4 bg-slate-950 p-4 sm:p-5 rounded-2xl border border-slate-800 text-slate-100 flex flex-col gap-3.5 animate-slideDown shadow-2xl">
+            {/* Direct Player Header */}
+            <div className="flex items-center justify-between text-white border-b border-white/[0.08] pb-3 text-xs gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-blue-405 font-mono text-[9px] bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 uppercase font-black">
+                  LECTEUR DIRECT {selectedResourceForPreview.type === 'audio' ? '🔊' : '📄'}
+                </span>
+                <span className="font-extrabold text-slate-200 truncate max-w-[200px] sm:max-w-xs md:max-w-md">
+                  {selectedResourceForPreview.resourceName}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setSelectedSpeechFiche(fiche)}
+                  className="p-1 px-2.5 bg-gradient-to-r from-[#4285F4] to-indigo-650 hover:from-blue-600 hover:to-indigo-750 text-white rounded-lg transition-all text-[10px] flex items-center gap-1 font-bold border border-transparent shadow hover:scale-105 active:scale-95 cursor-pointer select-none"
+                  title="Ouvrir le liseur vocal pour ce document"
+                >
+                  <Volume2 className="w-3.5 h-3.5" /> Lire à haute voix 🔊
+                </button>
+                <a
+                  href={selectedResourceForPreview.url}
+                  target="_blank"
+                  referrerPolicy="no-referrer"
+                  rel="noopener noreferrer"
+                  className="p-1 px-2.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg transition-all text-[10px] flex items-center gap-1 font-bold border border-white/[0.08]"
+                >
+                  Ouvrir externe ↗
+                </a>
+                <button
+                  onClick={() => setSelectedResourceForPreview(null)}
+                  className="text-white font-black text-[10px] p-1 px-2 bg-red-650 hover:bg-red-700 rounded-lg transition-all cursor-pointer shadow-sm"
+                >
+                  ✕ Fermer
+                </button>
+              </div>
+            </div>
+
+            {/* Content preview direct frame */}
+            {selectedResourceForPreview.type === 'audio' ? (
+              <div className="w-full flex flex-col gap-3">
+                <div className="p-4 bg-emerald-950/30 rounded-xl border border-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-center sm:text-left">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-emerald-500/10 text-emerald-300 rounded-full border border-emerald-500/20">
+                      <Volume2 className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div>
+                      <h5 className="text-sm font-bold text-slate-100">{selectedResourceForPreview.resourceName}</h5>
+                      <p className="text-[10px] text-slate-400 font-medium">Lecteur officiel Google Drive intégré &bull; Lecture directe</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-mono self-center">
+                    GOOGLE DRIVE AUDIO
+                  </span>
+                </div>
+                {getDriveEmbedUrl(selectedResourceForPreview.url) ? (
+                  <div className="w-full h-[180px] sm:h-[220px] relative rounded-xl overflow-hidden bg-slate-900 border border-slate-805 shadow-inner">
+                    <iframe 
+                      src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
+                      className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
+                      allow="autoplay; encrypted-media"
+                      title="In-App Audio"
+                    />
+                  </div>
+                ) : (
+                  <div className="p-4 bg-slate-900 rounded-xl border border-slate-800">
+                    <audio 
+                      src={selectedResourceForPreview.url} 
+                      controls 
+                      autoPlay
+                      className="w-full outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+            ) : getDriveEmbedUrl(selectedResourceForPreview.url) ? (
+              <div className="w-full h-[450px] relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800">
+                <iframe 
+                  src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
+                  className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
+                  allow="autoplay; encrypted-media"
+                  title="In-App Preview"
+                />
+              </div>
+            ) : (
+              <div className="p-8 text-center text-slate-300 bg-slate-900 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
+                <span className="text-3xl mb-2">⚠️</span>
+                <h5 className="font-bold text-sm text-slate-100">Intégration directe non supportée</h5>
+                <p className="text-xs text-slate-404 mt-1 max-w-sm">Ce fichier requiert une authentification externe ou une extension de sécurité.</p>
+                <a 
+                  href={selectedResourceForPreview.url} 
+                  target="_blank" 
+                  referrerPolicy="no-referrer"
+                  rel="noopener noreferrer" 
+                  className="mt-4 px-4 py-2 bg-[#4285F4] hover:bg-blue-600 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow"
+                >
+                  Ouvrir externe <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            )}
+
+            <div className="text-[10px] text-slate-400 italic">
+              💡 Lecture sécurisée dans l'application &bull; Prévient les redirections externes
+            </div>
+          </div>
+        )}
+
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#F0F2F5] text-slate-800 pb-16 font-sans">
@@ -672,20 +1362,22 @@ export default function App() {
                  activeZone === 'C'
                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
                    : 'text-slate-400 hover:text-slate-200'
-               }`}
+              }`}
             >
-              <BookOpen className="w-4 h-4 shrink-0" />
-              Zone C: Tous
+              <Layers className="w-4 h-4 shrink-0" />
+              Zone C: Commune
             </button>
           </div>
         </div>
 
         {/* 4. FILTERS AND SEARCH COMPONENT BOARD */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 mb-8">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
+        <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-200/80 mb-8 flex flex-col gap-4">
+          
+          {/* Top Row: Search + View Mode Toggle */}
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-slate-100 pb-4">
             
             {/* Search inputs */}
-            <div className="relative w-full lg:w-96">
+            <div className="relative w-full md:w-96">
               <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
               <input
                 type="text"
@@ -696,97 +1388,377 @@ export default function App() {
               />
             </div>
 
-            {/* Filter tags list */}
-            <div className="w-full lg:flex-1 overflow-x-auto no-scrollbar py-2">
-              <div className="flex items-center gap-2 min-w-max">
-                <span className="text-xs text-slate-400 flex items-center gap-1"><Filter className="w-3.5 h-3.5 animate-bounce" /> Thème:</span>
-                {topics.map(t => {
-                  const count = t === 'All' ? fiches.length : fiches.filter(f => f.topic === t).length;
-                  const isSelected = selectedTopic === t;
-                  
-                  const getAccentClass = () => {
-                    if (!isSelected) return 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-105 hover:shadow-sm';
-                    switch (t) {
-                      case 'HTML & CSS':
-                        return 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-md shadow-amber-500/10 border border-amber-400 rotate-1';
-                      case 'Bootstrap':
-                        return 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/10 border border-purple-500 -rotate-1';
-                      case 'Bases de Données':
-                        return 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md shadow-blue-500/10 border border-blue-500 rotate-1';
-                      case 'Python Backend':
-                        return 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/10 border border-emerald-500 -rotate-1';
-                      case 'Python Quality & Flask':
-                        return 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md shadow-rose-500/10 border border-rose-500 rotate-1';
-                      case 'APIs, Git & Sécurité':
-                        return 'bg-gradient-to-r from-cyan-600 to-teal-500 text-white shadow-md shadow-cyan-500/10 border border-cyan-500 -rotate-1';
-                      default:
-                        return 'bg-slate-900 text-white shadow-md rotate-0';
-                    }
-                  };
+            {/* View Mode Switcher Selectors / Buttons */}
+            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl w-full md:w-auto self-stretch md:self-auto shadow-inner">
+              <button
+                onClick={() => {
+                  setViewMode('continue');
+                  triggerToast("📋 Navigation en liste continue activée", "info");
+                }}
+                className={`flex-1 md:flex-none py-1.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  viewMode === 'continue'
+                    ? 'bg-slate-900 text-white shadow'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                Liste Continue
+              </button>
+              <button
+                onClick={() => {
+                  setViewMode('segmented');
+                  triggerToast("🗂️ Navigation par séquences (Blocs/Modules) activée", "info");
+                }}
+                className={`flex-1 md:flex-none py-1.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  viewMode === 'segmented'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                <Grid className="w-3.5 h-3.5" />
+                Séquences (Blocs/Modules)
+              </button>
+            </div>
+            
+          </div>
 
-                  return (
-                    <button
-                      key={t}
-                      onClick={() => {
-                        setSelectedTopic(t);
-                        triggerToast(`Filtré par : ${t === 'All' ? 'Tous les cours' : t} ! 🌟`, "info");
-                      }}
-                      className={`p-1.5 px-3 rounded-xl text-[11px] font-extrabold cursor-pointer transition-all duration-300 flex items-center gap-1.5 transform active:scale-95 border-b-2 border-transparent ${getAccentClass()}`}
-                    >
-                      <span>{t === 'All' ? 'Tous 🗺️' : t}</span>
-                      <span className={`px-1.5 py-0.2 text-[9px] font-black rounded-full leading-none flex items-center justify-center ${
-                        isSelected ? 'bg-white/20 text-white' : 'bg-slate-205 text-slate-700'
-                      }`}>
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
+          {/* Middle Row: Thématique Filtering Slider */}
+          <div className="w-full overflow-x-auto no-scrollbar py-1">
+            <div className="flex items-center gap-2 min-w-max">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1"><Filter className="w-3 h-3 text-indigo-500" /> Thème :</span>
+              {topics.map(t => {
+                const count = t === 'All' ? fiches.length : fiches.filter(f => f.topic === t).length;
+                const isSelected = selectedTopic === t;
+                
+                const getAccentClass = () => {
+                  if (!isSelected) return 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 hover:scale-[1.02]';
+                  switch (t) {
+                    case 'HTML & CSS':
+                      return 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-md shadow-amber-500/10 border border-amber-400 rotate-1';
+                    case 'Bootstrap':
+                      return 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/10 border border-purple-500 -rotate-1';
+                    case 'Bases de Données':
+                      return 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md shadow-blue-500/10 border border-blue-500 rotate-1';
+                    case 'Python Backend':
+                      return 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/10 border border-emerald-505 -rotate-1';
+                    case 'Python Quality & Flask':
+                      return 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md shadow-rose-500/10 border border-rose-500 rotate-1';
+                    case 'APIs, Git & Sécurité':
+                      return 'bg-gradient-to-r from-cyan-600 to-teal-500 text-white shadow-md shadow-cyan-505 border border-[#22d3ee] -rotate-1';
+                    default:
+                      return 'bg-slate-900 text-white shadow-md rotate-0';
+                  }
+                };
+
+                return (
+                  <button
+                    key={t}
+                    onClick={() => {
+                      setSelectedTopic(t);
+                      triggerToast(`Thématique filtrée : ${t === 'All' ? 'Tous les cours' : t} 🌟`, "info");
+                    }}
+                    className={`p-1.5 px-3 rounded-xl text-[11px] font-extrabold cursor-pointer transition-all duration-300 flex items-center gap-1.5 transform active:scale-95 border border-transparent ${getAccentClass()}`}
+                  >
+                    <span>{t === 'All' ? 'Tous 🗺️' : t}</span>
+                    <span className={`px-1.5 py-0.2 text-[9px] font-black rounded-full leading-none flex items-center justify-center ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-slate-205 text-slate-750'
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Bottom Row: Isolateurs par Blocs et Modules + Statut */}
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4 text-xs">
+            
+            <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
+              
+              {/* Block isolator */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-455 uppercase tracking-wide">Filtre Bloc :</span>
+                <select
+                  value={selectedBlock}
+                  onChange={(e) => {
+                    setSelectedBlock(e.target.value);
+                    triggerToast(`Isolation Bloc: ${e.target.value === 'All' ? 'Tous les blocs' : e.target.value}`, "info");
+                  }}
+                  className="bg-slate-50 border border-slate-200 focus:border-slate-800 rounded-xl p-1.5 px-3 text-xs text-slate-700 font-bold pointer focus:outline-none"
+                >
+                  <option value="All">Tous les blocs 📚</option>
+                  {blocksList.filter(b => b !== 'All').map(block => (
+                    <option key={block} value={block}>Bloc {block.replace('B', '')}</option>
+                  ))}
+                  <option value="Autre">Hors Blocs ⚓</option>
+                </select>
               </div>
+
+              {/* Module isolator */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-455 uppercase tracking-wide">Filtre Module :</span>
+                <select
+                  value={selectedModule}
+                  onChange={(e) => {
+                    setSelectedModule(e.target.value);
+                    triggerToast(`Isolation Module: ${e.target.value === 'All' ? 'Tous les modules' : e.target.value}`, "info");
+                  }}
+                  className="bg-slate-50 border border-slate-200 focus:border-slate-800 rounded-xl p-1.5 px-3 text-xs text-slate-700 font-bold pointer focus:outline-none"
+                >
+                  <option value="All">Tous les modules 🔖</option>
+                  {modulesList.filter(m => m !== 'All').map(mod => (
+                    <option key={mod} value={mod}>Module {mod.replace('M', '')}</option>
+                  ))}
+                  <option value="Autre">Hors Modules ⚓</option>
+                </select>
+              </div>
+
             </div>
 
-            {/* Status indicators */}
-            <div className="flex items-center gap-2 w-full lg:w-auto shrink-0 border-t lg:border-t-0 pt-3 lg:pt-0">
-              <span className="text-xs text-slate-400">Statut:</span>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-xl p-2 px-3 text-xs text-slate-750 pointer focus:outline-none focus:border-slate-400"
-              >
-                <option value="All">Tout afficher 📊</option>
-                <option value="Fait">Fait ✔</option>
-                <option value="En cours">En cours ⏳</option>
-                <option value="A faire">À faire 💤</option>
-              </select>
+            <div className="flex items-center gap-3 w-full sm:w-auto shrink-0 justify-between sm:justify-start">
+              
+              {/* Status Filter */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-455 uppercase tracking-wide">Statut :</span>
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  className="bg-slate-50 border border-slate-202 focus:border-slate-800 rounded-xl p-1.5 px-3 text-xs text-slate-750 font-bold pointer focus:outline-none"
+                >
+                  <option value="All">Tout afficher 📊</option>
+                  <option value="Fait">Fait ✔</option>
+                  <option value="En cours">En cours ⏳</option>
+                  <option value="A faire">À faire 💤</option>
+                </select>
+              </div>
 
-              {/* Bulk actions button */}
+              {/* Bulk actions check button */}
               {filteredFiches.length > 0 && (
                 <button
                   onClick={() => markFilteredAsCompleted(filteredFiches)}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-1 pointer active:scale-95 shadow-sm"
                 >
-                  <Check className="w-3.5 h-3.5" /> Tout cocher
+                  <Check className="w-3.5 h-3.5" /> Tout cocher ({filteredFiches.length})
                 </button>
               )}
+
             </div>
 
           </div>
+
         </div>
 
         {/* 5. MAIN CHECKLIST GRID SYSTEM */}
-        <div className="mb-4 flex items-center justify-between text-xs text-slate-500 max-w-7xl px-2">
+        <div className="mb-4 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 max-w-7xl px-2 gap-2">
           <span>{filteredFiches.length} fiches d'études correspondent aux filtres</span>
-          <span>Zone active: <strong className={activeZone === 'A' ? 'text-[#4285F4]' : activeZone === 'B' ? 'text-[#EA4335]' : 'text-emerald-500'}>{activeZone === 'A' ? 'Moi (Évaluation)' : activeZone === 'B' ? 'Exigences Jury' : 'Zone Commune Neutre'}</strong></span>
+          <span>Séquencement: <strong className="text-slate-800 font-extrabold uppercase">{viewMode === 'continue' ? 'Liste Continue 📋' : 'Par Séquences Blocs & Modules 🗂️'}</strong></span>
+          <span>Zone active: <strong className={activeZone === 'A' ? 'text-[#4285F4]' : activeZone === 'B' ? 'text-[#EA4335]' : 'text-emerald-500 font-bold'}>{activeZone === 'A' ? 'Moi (Évaluation)' : activeZone === 'B' ? 'Exigences Jury' : 'Zone Commune Neutre'}</strong></span>
         </div>
 
         {filteredFiches.length === 0 ? (
           <div className="bg-white p-12 text-center rounded-2xl border-2 border-dashed border-slate-300">
             <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-3" />
             <h4 className="text-base font-bold text-slate-750">Aucun cours trouvé</h4>
-            <p className="text-xs text-slate-500 mt-1">Ajustez les termes de recherche ou la thématique de filtre.</p>
+            <p className="text-xs text-slate-500 mt-1">Ajustez les termes de recherche, le filtre de Bloc, de Module ou le Thème de cours.</p>
+          </div>
+        ) : viewMode === 'continue' ? (
+          <div className="flex flex-col gap-4">
+            {filteredFiches.map(fiche => renderFicheCard(fiche))}
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-8">
+            {fichesGroupedByBlockAndModule.map(group => {
+              const isCollapsed = !expandedBlocks[group.blockCode];
+              const totalCountInBlock = group.modules.reduce((acc, m) => acc + m.fiches.length, 0);
+
+              return (
+                <div 
+                  key={group.blockCode} 
+                  id={`scroll-block-${group.blockCode}`}
+                  className="bg-slate-50 p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm transition-all animate-fadeIn"
+                >
+                  {/* Block Header Card with toggle expand/collapse button */}
+                  <div 
+                    onClick={() => toggleBlockExpanded(group.blockCode)}
+                    className="flex items-center justify-between cursor-pointer select-none pb-3 border-b border-slate-200 mb-4 hover:opacity-90"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-slate-900 text-white rounded-2xl shadow">
+                        <Grid className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                          {group.blockCode === 'Autre' ? 'Cours hors Séquences d\'Études' : `Séquence ${group.blockCode.replace('B', '')}`}
+                          <span className="text-xs font-bold text-slate-400 font-mono">({group.blockCode})</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                          {totalCountInBlock} {totalCountInBlock > 1 ? 'fiches d\'études' : 'fiche d\'étude'} sous ce bloc
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] uppercase font-bold text-[#4285F4] bg-blue-50 border border-blue-200/60 px-2.5 py-0.5 rounded-full shadow-sm">
+                        {group.blockCode === 'Autre' ? 'Autre' : `Bloc ${group.blockCode.replace('B', '')}`}
+                      </span>
+                      <button className="p-1 px-2.5 hover:bg-slate-200 rounded-xl transition-colors text-slate-500">
+                        {isCollapsed ? <ChevronDown className="w-4.5 h-4.5" /> : <ChevronUp className="w-4.5 h-4.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isCollapsed ? (
+                    <div className="space-y-6 pt-2">
+                      {group.modules.map(mod => {
+                        return (
+                          <div key={mod.moduleCode} className="border-l-[3px] border-l-[#4285F4] pl-4 sm:pl-5 space-y-3 relative">
+                            {/* Module Label Sub-Header */}
+                            <div className="flex items-center justify-between gap-3 text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-[#4285F4]" />
+                                <h5 className="font-extrabold text-[#1a56bc] uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                                  {mod.moduleCode === 'Autre' ? 'Sujets Isolés' : `Module ${mod.moduleCode.replace('M', '')}`}
+                                  <span className="text-[10px] font-mono text-slate-400 normal-case font-bold">({mod.moduleCode})</span>
+                                </h5>
+                              </div>
+                              <span className="text-[10.5px] font-bold text-slate-400 bg-slate-100 px-2 rounded-lg border border-slate-150">
+                                {mod.fiches.length} {mod.fiches.length > 1 ? 'cours groupés' : 'cours unique'}
+                              </span>
+                            </div>
+
+                            {/* Fiches Cards Grid inside Module */}
+                            <div className="flex flex-col gap-4">
+                              {mod.fiches.map(fiche => renderFicheCard(fiche))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-1 bg-white/50 rounded-xl text-slate-400 text-xs italic">
+                      Séquence masquée &bull; Déroulez pour afficher les {totalCountInBlock} cours associés
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      {/* 6. FLOATING ELEVATOR NAVIGATION CONTROL DECK */}
+      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2 shrink-0 select-none max-w-[160px] md:max-w-xs animate-slideUp">
+        {/* Expanded Navigation Deck */}
+        <div className="bg-slate-900/95 backdrop-blur border border-slate-750 p-2.5 sm:p-3 rounded-3xl shadow-2xl flex flex-col gap-2.5 text-white max-w-[160px] md:max-w-[200px]">
+          <div className="border-b border-slate-800 pb-1 text-center">
+            <span className="text-[9px] uppercase font-black tracking-widest text-slate-400 flex items-center justify-center gap-1">
+              <Compass className="w-3 h-3 text-blue-450 animate-spin" /> ASCENSEUR 🧭
+            </span>
+          </div>
+
+          {/* Quick jump Zone Selector Shortcuts */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Accès Zones :</p>
+            <div className="grid grid-cols-3 gap-1">
+              <button
+                onClick={() => {
+                  setActiveZone('A');
+                  triggerToast("🎯 Zone A activée !", "success");
+                  window.scrollTo({ top: 400, behavior: 'smooth' });
+                }}
+                className={`py-1 text-xs font-black rounded-lg text-center transition-all ${
+                  activeZone === 'A' ? 'bg-[#4285F4] text-white shadow-md shadow-blue-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                }`}
+                title="Sauter à la Zone A (Moi)"
+              >
+                A
+              </button>
+              <button
+                onClick={() => {
+                  setActiveZone('B');
+                  triggerToast("📢 Zone B activée !", "success");
+                  window.scrollTo({ top: 400, behavior: 'smooth' });
+                }}
+                className={`py-1 text-xs font-black rounded-lg text-center transition-all ${
+                  activeZone === 'B' ? 'bg-[#EA4335] text-white shadow-md shadow-red-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-705 text-slate-300'
+                }`}
+                title="Sauter à la Zone B (Jury)"
+              >
+                B
+              </button>
+              <button
+                onClick={() => {
+                  setActiveZone('C');
+                  triggerToast("🤝 Zone commune activée !", "success");
+                  window.scrollTo({ top: 400, behavior: 'smooth' });
+                }}
+                className={`py-1 text-xs font-black rounded-lg text-center transition-all ${
+                  activeZone === 'C' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-705 text-slate-300'
+                }`}
+                title="Sauter à la Zone C (Commune)"
+              >
+                C
+              </button>
+            </div>
+          </div>
+
+          {/* If in segmented view, quick block links */}
+          {viewMode === 'segmented' && fichesGroupedByBlockAndModule.length > 0 && (
+            <div className="flex flex-col gap-1.5 border-t border-slate-800 pt-2 max-h-[140px] overflow-y-auto no-scrollbar">
+              <p className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Sauts de Blocs :</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {fichesGroupedByBlockAndModule.map(group => (
+                  <button
+                    key={group.blockCode}
+                    onClick={() => {
+                      const el = document.getElementById(`scroll-block-${group.blockCode}`);
+                      if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        triggerToast(`Défilé vers le bloc : ${group.blockCode} 📍`, "info");
+                        if (!expandedBlocks[group.blockCode]) {
+                          toggleBlockExpanded(group.blockCode);
+                        }
+                      } else {
+                        triggerToast("Bloc non présent dans la vue actuelle", "info");
+                      }
+                    }}
+                    className="p-1 text-[9px] font-black uppercase text-slate-300 bg-slate-800 rounded-md hover:bg-slate-700 transition-colors"
+                  >
+                    {group.blockCode}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Scroll controls */}
+          <div className="flex items-center justify-between gap-2 border-t border-slate-800 pt-2">
+            <button
+              onClick={() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                triggerToast("⬆️ Défilement tout en haut !", "info");
+              }}
+              className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all flex items-center justify-center gap-1 font-bold text-[10px]"
+              title="Tout en haut"
+            >
+              <ArrowUp className="w-3.5 h-3.5" /> Haut
+            </button>
+            <button
+              onClick={() => {
+                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                triggerToast("⬇️ Défilement tout en bas !", "info");
+              }}
+              className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all flex items-center justify-center gap-1 font-bold text-[10px]"
+              title="Tout en bas"
+            >
+              <ArrowDown className="w-3.5 h-3.5" /> Bas
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {false && (
+        <div className="hidden bg-white/20">
             {filteredFiches.map(fiche => {
               const currentStatus = activeZone === 'A' ? fiche.status1 : activeZone === 'B' ? fiche.status2 : (fiche.status3 || 'A faire');
               const completedDate = activeZone === 'A' ? fiche.date1 : activeZone === 'B' ? fiche.date2 : fiche.date3;
@@ -1336,7 +2308,7 @@ export default function App() {
               );
             })}
           </div>
-        )}
+      )}
       </main>
 
       {/* Modern Compact Floating Navigation Footer */}
