@@ -6,6 +6,7 @@ import { initialFiches } from '../data/initialData';
 interface CsvLoaderProps {
   onDataLoaded: (data: Fiche[]) => void;
   currentCount: number;
+  currentList?: Fiche[];
 }
 
 // Get base public URL
@@ -177,6 +178,11 @@ export const parseSingleTextToSheet = (text: string) => {
 export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; records: Record<number, any> }[], currentList: Fiche[]): Fiche[] => {
   const mergedMap: Record<number, Partial<Fiche>> = {};
 
+  // First copy currentList's existing records to retain all user states/clicks/dates
+  currentList.forEach(fiche => {
+    mergedMap[fiche.id] = { ...fiche };
+  });
+
   sheets.forEach(sheet => {
     const section = sheet.section;
     Object.entries(sheet.records).forEach(([idStr, rec]) => {
@@ -223,7 +229,9 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
       }
 
       if (section === 'eval1') {
-        m.status1 = rec.status;
+        m.inZoneA = true;
+        // Keep user local/custom status if it is already "Fait" or "En cours" in the app
+        m.status1 = (m.status1 && m.status1 !== 'A faire' && rec.status === 'A faire') ? m.status1 : rec.status;
         if (rec.date) m.date1 = rec.date;
         if (rec.audio) m.audio1 = rec.audio;
         if (rec.slide) m.slide1 = rec.slide;
@@ -232,7 +240,8 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
         if (rec.nblm) m.nblm1 = rec.nblm;
         if (rec.suivi) m.suivi1 = rec.suivi;
       } else if (section === 'eval2') {
-        m.status2 = rec.status;
+        m.inZoneB = true;
+        m.status2 = (m.status2 && m.status2 !== 'A faire' && rec.status === 'A faire') ? m.status2 : rec.status;
         if (rec.date) m.date2 = rec.date;
         if (rec.audio) m.audio2 = rec.audio;
         if (rec.slide) m.slide2 = rec.slide;
@@ -241,7 +250,8 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
         if (rec.nblm) m.nblm2 = rec.nblm;
         if (rec.suivi) m.suivi2 = rec.suivi;
       } else if (section === 'eval0') {
-        m.status3 = rec.status;
+        m.inZoneC = true;
+        m.status3 = (m.status3 && m.status3 !== 'A faire' && rec.status === 'A faire') ? m.status3 : rec.status;
         if (rec.date) m.date3 = rec.date;
         if (rec.audio) m.audio3 = rec.audio;
         if (rec.slide) m.slide3 = rec.slide;
@@ -253,45 +263,40 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
     });
   });
 
-  const mergedList = currentList.map(orig => {
-    const update = mergedMap[orig.id];
-    if (update) {
-      return {
-        ...orig,
-        ...update,
-        coursFileUrl: update.coursFileUrl || orig.coursFileUrl || '',
-        status1: update.status1 || orig.status1,
-        status2: update.status2 || orig.status2,
-        status3: update.status3 || orig.status3 || 'A faire',
-      } as Fiche;
-    }
-    return orig;
+  // Re-generate list from mergedMap, making sure new IDS are handled cleanly
+  const finalIds = Array.from(new Set([
+    ...currentList.map(f => f.id),
+    ...Object.keys(mergedMap).map(idStr => parseInt(idStr, 10))
+  ])).filter(id => !isNaN(id));
+
+  const resultList = finalIds.map(id => {
+    const up = mergedMap[id];
+    
+    // Default fallback zone memberships for common files of Bloc 3
+    const belongsToAB = (id >= 188 && id <= 342) || id === 329 || id === 333 || id === 335 || id === 338 || id === 340 || id === 342;
+    
+    return {
+      id,
+      title: up.title || `Fiche #${id}`,
+      topic: up.topic || 'Autre',
+      action: up.action || '',
+      motorsLink: up.motorsLink || '',
+      status1: up.status1 || 'A faire',
+      status2: up.status2 || 'A faire',
+      status3: up.status3 || 'A faire',
+      coursFile: up.coursFile || `${id}_cours.pdf`,
+      coursFileUrl: up.coursFileUrl || '',
+      inZoneA: up.inZoneA !== undefined ? up.inZoneA : belongsToAB,
+      inZoneB: up.inZoneB !== undefined ? up.inZoneB : belongsToAB,
+      inZoneC: up.inZoneC !== undefined ? up.inZoneC : true,
+      ...up
+    } as Fiche;
   });
 
-  Object.keys(mergedMap).forEach(idStr => {
-    const id = parseInt(idStr, 10);
-    if (!mergedList.some(f => f.id === id)) {
-      const up = mergedMap[id];
-      mergedList.push({
-        id,
-        title: up.title || `Fiche #${id}`,
-        topic: up.topic || 'Autre',
-        action: up.action || '',
-        motorsLink: up.motorsLink || '',
-        status1: up.status1 || 'A faire',
-        status2: up.status2 || 'A faire',
-        status3: up.status3 || 'A faire',
-        coursFile: `${id}_cours.pdf`,
-        coursFileUrl: up.coursFileUrl || '',
-        ...up
-      } as Fiche);
-    }
-  });
-
-  return mergedList.sort((a, b) => a.id - b.id);
+  return resultList.sort((a, b) => a.id - b.id);
 };
 
-export default function CsvLoader({ onDataLoaded, currentCount }: CsvLoaderProps) {
+export default function CsvLoader({ onDataLoaded, currentCount, currentList }: CsvLoaderProps) {
   const [csvUrl, setCsvUrl] = useState('https://docs.google.com/spreadsheets/d/e/2PACX-1vS9upnowMIAhXQO5l7H-m9dfBtytEEugAA_ChZthJRiKILpUNJgrCSHHvQXRt_0QNF-2Sb8ie7gfi0L/pub?output=csv');
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -301,7 +306,7 @@ export default function CsvLoader({ onDataLoaded, currentCount }: CsvLoaderProps
   const parseCsvContent = (text: string) => {
     try {
       const single = parseSingleTextToSheet(text);
-      const merged = mergeSheets([single], initialFiches);
+      const merged = mergeSheets([single], currentList || initialFiches);
       
       onDataLoaded(merged);
       setStatusMessage({
@@ -345,7 +350,7 @@ export default function CsvLoader({ onDataLoaded, currentCount }: CsvLoaderProps
         const sheetA = parseSingleTextToSheet(textA);
         const sheetB = parseSingleTextToSheet(textB);
 
-        const merged = mergeSheets([sheetC, sheetA, sheetB], initialFiches);
+        const merged = mergeSheets([sheetC, sheetA, sheetB], currentList || initialFiches);
         onDataLoaded(merged);
         setStatusMessage({
           type: 'success',

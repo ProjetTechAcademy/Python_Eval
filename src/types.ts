@@ -41,6 +41,11 @@ export interface Fiche {
   suivi1?: string;
   suivi2?: string;
   suivi3?: string;
+
+  // Zone presence flags
+  inZoneA?: boolean;
+  inZoneB?: boolean;
+  inZoneC?: boolean;
 }
 
 export interface MetricCardConfig {

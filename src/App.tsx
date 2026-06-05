@@ -218,9 +218,11 @@ export default function App() {
         const sheetA = parseSingleTextToSheet(textA);
         const sheetB = parseSingleTextToSheet(textB);
 
-        const merged = mergeSheets([sheetC, sheetA, sheetB], initialFiches);
-        setFiches(merged);
-        localStorage.setItem('m-motors-fiches', JSON.stringify(merged));
+        setFiches(current => {
+          const merged = mergeSheets([sheetC, sheetA, sheetB], current);
+          localStorage.setItem('m-motors-fiches', JSON.stringify(merged));
+          return merged;
+        });
         triggerToast("🚀 Synchro auto : Toutes vos fiches à jour en direct depuis Google Sheets !", "success");
       } catch (error) {
         console.warn("Background auto-sync failed, running off cached offline fiches", error);
@@ -328,50 +330,63 @@ export default function App() {
   // Calculate live stats
   const totalFichesCount = fiches.length;
 
+  const fichesInZoneA = useMemo(() => fiches.filter(f => f.inZoneA === true), [fiches]);
+  const fichesInZoneB = useMemo(() => fiches.filter(f => f.inZoneB === true), [fiches]);
+  const fichesInZoneC = useMemo(() => fiches.filter(f => f.inZoneC === true), [fiches]);
+
   const stats1 = useMemo(() => {
-    const fait = fiches.filter(f => f.status1 === 'Fait').length;
-    const cours = fiches.filter(f => f.status1 === 'En cours').length;
-    const faire = fiches.filter(f => f.status1 === 'A faire').length;
+    const totalA = fichesInZoneA.length;
+    const fait = fichesInZoneA.filter(f => f.status1 === 'Fait').length;
+    const cours = fichesInZoneA.filter(f => f.status1 === 'En cours').length;
+    const faire = fichesInZoneA.filter(f => f.status1 === 'A faire').length;
     return {
       fait,
       cours,
       faire,
-      pct: totalFichesCount > 0 ? Math.round((fait / totalFichesCount) * 100) : 0
+      pct: totalA > 0 ? Math.round((fait / totalA) * 100) : 0
     };
-  }, [fiches, totalFichesCount]);
+  }, [fichesInZoneA]);
 
   const stats2 = useMemo(() => {
-    const fait = fiches.filter(f => f.status2 === 'Fait').length;
-    const cours = fiches.filter(f => f.status2 === 'En cours').length;
-    const faire = fiches.filter(f => f.status2 === 'A faire').length;
+    const totalB = fichesInZoneB.length;
+    const fait = fichesInZoneB.filter(f => f.status2 === 'Fait').length;
+    const cours = fichesInZoneB.filter(f => f.status2 === 'En cours').length;
+    const faire = fichesInZoneB.filter(f => f.status2 === 'A faire').length;
     return {
       fait,
       cours,
       faire,
-      pct: totalFichesCount > 0 ? Math.round((fait / totalFichesCount) * 100) : 0
+      pct: totalB > 0 ? Math.round((fait / totalB) * 100) : 0
     };
-  }, [fiches, totalFichesCount]);
+  }, [fichesInZoneB]);
 
   const stats3 = useMemo(() => {
-    const fait = fiches.filter(f => (f.status3 || 'A faire') === 'Fait').length;
-    const cours = fiches.filter(f => (f.status3 || 'A faire') === 'En cours').length;
-    const faire = fiches.filter(f => (f.status3 || 'A faire') === 'A faire').length;
+    const totalC = fichesInZoneC.length;
+    const fait = fichesInZoneC.filter(f => (f.status3 || 'A faire') === 'Fait').length;
+    const cours = fichesInZoneC.filter(f => (f.status3 || 'A faire') === 'En cours').length;
+    const faire = fichesInZoneC.filter(f => (f.status3 || 'A faire') === 'A faire').length;
     return {
       fait,
       cours,
       faire,
-      pct: totalFichesCount > 0 ? Math.round((fait / totalFichesCount) * 100) : 0
+      pct: totalC > 0 ? Math.round((fait / totalC) * 100) : 0
     };
-  }, [fiches, totalFichesCount]);
+  }, [fichesInZoneC]);
 
   const currentStats = activeZone === 'A' ? stats1 : activeZone === 'B' ? stats2 : stats3;
+
+  const fichesFilteredByZone = useMemo(() => {
+    if (activeZone === 'A') return fichesInZoneA;
+    if (activeZone === 'B') return fichesInZoneB;
+    return fichesInZoneC;
+  }, [activeZone, fichesInZoneA, fichesInZoneB, fichesInZoneC]);
 
   // Domain Category listing
   const topics = ['All', 'HTML & CSS', 'Bootstrap', 'Bases de Données', 'Python Backend', 'Python Quality & Flask', 'APIs, Git & Sécurité'];
 
   // Fiches that are filtered ONLY by block and module (not topic, search or status)
   const fichesFilteredOnlyByBlockAndModule = useMemo(() => {
-    return fiches.filter(f => {
+    return fichesFilteredByZone.filter(f => {
       const title = f.title || '';
       const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
       const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
@@ -383,7 +398,7 @@ export default function App() {
 
       return matchesBlock && matchesModule;
     });
-  }, [fiches, selectedBlock, selectedModule]);
+  }, [fichesFilteredByZone, selectedBlock, selectedModule]);
 
   // Dynamically extract all available Blocks & Modules from fiches, contextualized by selected block
   const { blocksList, modulesList, availableTopics } = useMemo(() => {
@@ -391,7 +406,7 @@ export default function App() {
     const modules = new Set<string>();
     const topicsSet = new Set<string>();
 
-    fiches.forEach(f => {
+    fichesFilteredByZone.forEach(f => {
       const title = f.title || '';
       const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
       const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
@@ -424,7 +439,7 @@ export default function App() {
       modulesList: ['All', ...sortedModules],
       availableTopics: ['All', ...Array.from(topicsSet)]
     };
-  }, [fiches, selectedBlock]);
+  }, [fichesFilteredByZone, selectedBlock]);
 
   // Handle auto-resetting module filter if it doesn't exist in newly filtered modules list
   useEffect(() => {
@@ -437,7 +452,7 @@ export default function App() {
 
   // Sub-filter core
   const filteredFiches = useMemo(() => {
-    return fiches.filter(f => {
+    return fichesFilteredByZone.filter(f => {
       const matchesTopic = selectedTopic === 'All' || f.topic === selectedTopic;
       const fStatus = activeZone === 'A' ? f.status1 : activeZone === 'B' ? f.status2 : (f.status3 || 'A faire');
       const matchesStatus = selectedStatus === 'All' || fStatus === selectedStatus;
@@ -460,7 +475,7 @@ export default function App() {
 
       return matchesTopic && matchesStatus && matchesSearch && matchesBlock && matchesModule;
     });
-  }, [fiches, activeZone, selectedTopic, selectedStatus, searchQuery, selectedBlock, selectedModule]);
+  }, [fichesFilteredByZone, activeZone, selectedTopic, selectedStatus, searchQuery, selectedBlock, selectedModule]);
 
   // Highly optimized grouping by Block and Module for nested view
   const fichesGroupedByBlockAndModule = useMemo(() => {
@@ -1194,6 +1209,7 @@ export default function App() {
                 setShowSyncPanel(false);
               }} 
               currentCount={fiches.length} 
+              currentList={fiches}
             />
           </div>
         )}
