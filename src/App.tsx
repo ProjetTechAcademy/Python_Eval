@@ -138,6 +138,52 @@ export default function App() {
     ficheId: number;
   } | null>(null);
 
+  const [previewHeight, setPreviewHeight] = useState<'compact' | 'large'>('compact'); // Default to compact (thinner) view as feedback requested
+  const [elevatorExpanded, setElevatorExpanded] = useState(false); // Starts collapsed for maximum uncluttered space
+
+  // Sticky Notes State with helpful default study tips (Sherwood note deleted permanently as requested)
+  const [stickyNotes, setStickyNotes] = useState<{ id: string; text: string; color: 'green' | 'yellow' | 'blue' | 'pink' }[]>(() => {
+    const saved = localStorage.getItem('m-motors-sticky-notes');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          // Permanently filter out the irrelevant Sherwood note from local storage storage cache
+          return parsed.filter(n => n.id !== 'sherwood' && !n.text.includes("Sherwood") && !n.text.includes("Clarendon"));
+        }
+      } catch (e) {
+        // Fallback
+      }
+    }
+    return [
+      { id: 'note-default', text: "Suivi des validations : Marquer 'Fait' pour synchroniser l'avancement de votre apprentissage.", color: 'green' }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('m-motors-sticky-notes', JSON.stringify(stickyNotes));
+  }, [stickyNotes]);
+
+  const [newNoteText, setNewNoteText] = useState('');
+  const [newNoteColor, setNewNoteColor] = useState<'green' | 'yellow' | 'blue' | 'pink'>('green');
+
+  const addStickyNote = () => {
+    if (!newNoteText.trim()) return;
+    const newNote: { id: string; text: string; color: 'green' | 'yellow' | 'blue' | 'pink' } = {
+      id: Date.now().toString(),
+      text: newNoteText.trim(),
+      color: newNoteColor
+    };
+    setStickyNotes(prev => [...prev, newNote]);
+    setNewNoteText('');
+    triggerToast("Note mémo épinglée ! 📌");
+  };
+
+  const deleteStickyNote = (id: string) => {
+    setStickyNotes(prev => prev.filter(n => n.id !== id));
+    triggerToast("Note mémo retirée 🗑️", "info");
+  };
+
   const [editingPdfFicheId, setEditingPdfFicheId] = useState<number | null>(null);
   const [selectedSpeechFiche, setSelectedSpeechFiche] = useState<Fiche | null>(null);
 
@@ -899,6 +945,12 @@ export default function App() {
                   Ouvrir externe ↗
                 </a>
                 <button
+                  onClick={() => setPreviewHeight(prev => prev === 'compact' ? 'large' : 'compact')}
+                  className="p-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-all text-[10px] flex items-center gap-1 font-extrabold cursor-pointer border border-slate-700 shadow-sm"
+                >
+                  {previewHeight === 'compact' ? '↕️ Mode Plein Écran' : '↕️ Mode Compact'}
+                </button>
+                <button
                   onClick={() => setSelectedResourceForPreview(null)}
                   className="text-white font-black text-[10px] p-1 px-2 bg-red-650 hover:bg-red-700 rounded-lg transition-all cursor-pointer shadow-sm"
                 >
@@ -945,7 +997,9 @@ export default function App() {
                 )}
               </div>
             ) : getDriveEmbedUrl(selectedResourceForPreview.url) ? (
-              <div className="w-full h-[450px] relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800">
+              <div className={`w-full relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 transition-all duration-300 ${
+                previewHeight === 'compact' ? 'h-[280px]' : 'h-[550px]'
+              }`}>
                 <iframe 
                   src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
                   className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
@@ -1370,6 +1424,113 @@ export default function App() {
           </div>
         </div>
 
+        {/* INTERACTIVE STICKY MEMO STICKERS BOARD */}
+        <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-5 sm:p-6 rounded-3xl border border-slate-205/80 mb-8 shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+            <h4 className="font-extrabold text-sm sm:text-base text-slate-800 flex items-center gap-2">
+              <span className="text-xl">📌</span> Tableau de Bord des Post-it Mémos
+            </h4>
+            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 font-mono bg-white px-2 py-0.5 rounded-full border border-slate-150">
+              Notes Autocollantes
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+            {/* Note Creator Left section */}
+            <div className="md:col-span-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3">
+              <p className="text-xs font-bold text-slate-705">Créer un nouveau Post-it :</p>
+              <textarea
+                value={newNoteText}
+                onChange={(e) => setNewNoteText(e.target.value)}
+                placeholder="Rédigez votre pense-bête, formule, ou rappel d'examen..."
+                rows={3}
+                className="w-full bg-slate-50 border border-slate-200 focus:border-slate-800 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-800 resize-none font-medium"
+              />
+              <div className="flex items-center justify-between gap-2 flex-wrap pb-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-500 font-semibold">Couleur :</span>
+                  <div className="flex items-center gap-1">
+                    {(['green', 'yellow', 'blue', 'pink'] as const).map(color => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => setNewNoteColor(color)}
+                        className={`w-4 h-4 rounded-full border transition-all cursor-pointer ${
+                          color === 'green' ? 'bg-emerald-300 border-emerald-400' :
+                          color === 'yellow' ? 'bg-amber-200 border-amber-300' :
+                          color === 'blue' ? 'bg-sky-200 border-sky-305' :
+                          'bg-pink-300 border-pink-400'
+                        } ${newNoteColor === color ? 'ring-2 ring-slate-800 scale-110' : 'opacity-80'}`}
+                        title={color}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={addStickyNote}
+                  className="py-1 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm hover:scale-105"
+                >
+                  Épingler 📌
+                </button>
+              </div>
+            </div>
+
+            {/* Sticky Notes Grid Right section */}
+            <div className="md:col-span-8 flex flex-wrap gap-4 justify-start items-start">
+              {stickyNotes.length === 0 ? (
+                <div className="w-full text-center py-10 bg-white/40 border-2 border-dashed border-slate-205 rounded-2xl text-slate-400 text-xs italic">
+                  Aucun sticker collé. Épinglez un mémorandum pour commencer !
+                </div>
+              ) : (
+                stickyNotes.map(note => {
+                  const getNoteBgColor = () => {
+                    switch (note.color) {
+                      case 'green':
+                        return 'bg-[#E2F7E4] hover:bg-[#D5F3D8] border-[#A8E4B1] text-[#13521E]';
+                      case 'yellow':
+                        return 'bg-[#FFF9C4] hover:bg-[#FFF59D] border-[#FFF176] text-[#5D4037]';
+                      case 'blue':
+                        return 'bg-[#E3F2FD] hover:bg-[#BBDEFB] border-[#90CAF9] text-[#0D47A1]';
+                      case 'pink':
+                        return 'bg-[#FCE4EC] hover:bg-[#F8BBD0] border-[#F48FB1] text-[#880E4F]';
+                      default:
+                        return 'bg-[#FFF9C4] border-[#FFF176] text-[#5D4037]';
+                    }
+                  };
+
+                  return (
+                    <div
+                      key={note.id}
+                      className={`w-full sm:w-[220px] p-4 rounded-2xl border-b-4 shadow-sm relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-md transform rotate-[-0.5deg] hover:rotate-0 flex flex-col justify-between min-h-[110px] ${getNoteBgColor()}`}
+                    >
+                      {/* Note Header Anchor Pin */}
+                      <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-4 h-4 bg-slate-900/10 rounded-full border border-white/20 flex items-center justify-center">
+                        <div className="w-1.5 h-1.5 bg-slate-800 rounded-full" />
+                      </div>
+
+                      {/* Content */}
+                      <p className="text-xs font-extrabold leading-relaxed pt-2 break-words z-10 select-text">
+                        {note.text}
+                      </p>
+
+                      {/* Footer Actions */}
+                      <div className="flex items-center justify-between border-t border-black/5 pt-2 mt-3 z-10 text-[9px] font-mono text-black/50">
+                        <span className="font-extrabold">Mémo Perso 📝</span>
+                        <button
+                          onClick={() => deleteStickyNote(note.id)}
+                          className="hover:text-red-750 hover:scale-105 transition-all font-black uppercase cursor-pointer text-slate-505 hover:underline"
+                        >
+                          Détacher
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* 4. FILTERS AND SEARCH COMPONENT BOARD */}
         <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-200/80 mb-8 flex flex-col gap-4">
           
@@ -1648,113 +1809,131 @@ export default function App() {
 
       {/* 6. FLOATING ELEVATOR NAVIGATION CONTROL DECK */}
       <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2 shrink-0 select-none max-w-[160px] md:max-w-xs animate-slideUp">
-        {/* Expanded Navigation Deck */}
-        <div className="bg-slate-900/95 backdrop-blur border border-slate-750 p-2.5 sm:p-3 rounded-3xl shadow-2xl flex flex-col gap-2.5 text-white max-w-[160px] md:max-w-[200px]">
-          <div className="border-b border-slate-800 pb-1 text-center">
-            <span className="text-[9px] uppercase font-black tracking-widest text-slate-400 flex items-center justify-center gap-1">
-              <Compass className="w-3 h-3 text-blue-450 animate-spin" /> ASCENSEUR 🧭
-            </span>
-          </div>
-
-          {/* Quick jump Zone Selector Shortcuts */}
-          <div className="flex flex-col gap-1.5">
-            <p className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Accès Zones :</p>
-            <div className="grid grid-cols-3 gap-1">
-              <button
-                onClick={() => {
-                  setActiveZone('A');
-                  triggerToast("🎯 Zone A activée !", "success");
-                  window.scrollTo({ top: 400, behavior: 'smooth' });
-                }}
-                className={`py-1 text-xs font-black rounded-lg text-center transition-all ${
-                  activeZone === 'A' ? 'bg-[#4285F4] text-white shadow-md shadow-blue-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                }`}
-                title="Sauter à la Zone A (Moi)"
+        {elevatorExpanded ? (
+          /* Expanded Navigation Deck */
+          <div className="bg-slate-900/95 backdrop-blur border border-slate-755 p-2.5 sm:p-3 rounded-3xl shadow-2xl flex flex-col gap-2.5 text-white max-w-[160px] md:max-w-[200px] transition-all duration-300">
+            <div className="border-b border-slate-800 pb-1 flex items-center justify-between gap-1">
+              <span className="text-[9px] uppercase font-black tracking-widest text-[#4285F4] flex items-center gap-1">
+                <Compass className="w-3 h-3 text-[#4285F4] animate-spin" /> ASCENSEUR 🧭
+              </span>
+              <button 
+                onClick={() => setElevatorExpanded(false)}
+                className="text-[10px] text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-1.5 py-0.5 rounded-md font-black cursor-pointer"
+                title="Plier l'ascenseur"
               >
-                A
-              </button>
-              <button
-                onClick={() => {
-                  setActiveZone('B');
-                  triggerToast("📢 Zone B activée !", "success");
-                  window.scrollTo({ top: 400, behavior: 'smooth' });
-                }}
-                className={`py-1 text-xs font-black rounded-lg text-center transition-all ${
-                  activeZone === 'B' ? 'bg-[#EA4335] text-white shadow-md shadow-red-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-705 text-slate-300'
-                }`}
-                title="Sauter à la Zone B (Jury)"
-              >
-                B
-              </button>
-              <button
-                onClick={() => {
-                  setActiveZone('C');
-                  triggerToast("🤝 Zone commune activée !", "success");
-                  window.scrollTo({ top: 400, behavior: 'smooth' });
-                }}
-                className={`py-1 text-xs font-black rounded-lg text-center transition-all ${
-                  activeZone === 'C' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-705 text-slate-300'
-                }`}
-                title="Sauter à la Zone C (Commune)"
-              >
-                C
+                ✕
               </button>
             </div>
-          </div>
 
-          {/* If in segmented view, quick block links */}
-          {viewMode === 'segmented' && fichesGroupedByBlockAndModule.length > 0 && (
-            <div className="flex flex-col gap-1.5 border-t border-slate-800 pt-2 max-h-[140px] overflow-y-auto no-scrollbar">
-              <p className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Sauts de Blocs :</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {fichesGroupedByBlockAndModule.map(group => (
-                  <button
-                    key={group.blockCode}
-                    onClick={() => {
-                      const el = document.getElementById(`scroll-block-${group.blockCode}`);
-                      if (el) {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        triggerToast(`Défilé vers le bloc : ${group.blockCode} 📍`, "info");
-                        if (!expandedBlocks[group.blockCode]) {
-                          toggleBlockExpanded(group.blockCode);
-                        }
-                      } else {
-                        triggerToast("Bloc non présent dans la vue actuelle", "info");
-                      }
-                    }}
-                    className="p-1 text-[9px] font-black uppercase text-slate-300 bg-slate-800 rounded-md hover:bg-slate-700 transition-colors"
-                  >
-                    {group.blockCode}
-                  </button>
-                ))}
+            {/* Quick jump Zone Selector Shortcuts */}
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Accès Zones :</p>
+              <div className="grid grid-cols-3 gap-1">
+                <button
+                  onClick={() => {
+                    setActiveZone('A');
+                    triggerToast("🎯 Zone A activée !", "success");
+                    window.scrollTo({ top: 400, behavior: 'smooth' });
+                  }}
+                  className={`py-1 text-xs font-black rounded-lg text-center transition-all cursor-pointer ${
+                    activeZone === 'A' ? 'bg-[#4285F4] text-white shadow-md shadow-blue-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
+                  title="Sauter à la Zone A (Moi)"
+                >
+                  A
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveZone('B');
+                    triggerToast("📢 Zone B activée !", "success");
+                    window.scrollTo({ top: 400, behavior: 'smooth' });
+                  }}
+                  className={`py-1 text-xs font-black rounded-lg text-center transition-all cursor-pointer ${
+                    activeZone === 'B' ? 'bg-[#EA4335] text-white shadow-md shadow-red-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-705 text-slate-303'
+                  }`}
+                  title="Sauter à la Zone B (Jury)"
+                >
+                  B
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveZone('C');
+                    triggerToast("🤝 Zone commune activée !", "success");
+                    window.scrollTo({ top: 400, behavior: 'smooth' });
+                  }}
+                  className={`py-1 text-xs font-black rounded-lg text-center transition-all cursor-pointer ${
+                    activeZone === 'C' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-705 text-slate-303'
+                  }`}
+                  title="Sauter à la Zone C (Commune)"
+                >
+                  C
+                </button>
               </div>
             </div>
-          )}
 
-          {/* Scroll controls */}
-          <div className="flex items-center justify-between gap-2 border-t border-slate-800 pt-2">
-            <button
-              onClick={() => {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-                triggerToast("⬆️ Défilement tout en haut !", "info");
-              }}
-              className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all flex items-center justify-center gap-1 font-bold text-[10px]"
-              title="Tout en haut"
-            >
-              <ArrowUp className="w-3.5 h-3.5" /> Haut
-            </button>
-            <button
-              onClick={() => {
-                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                triggerToast("⬇️ Défilement tout en bas !", "info");
-              }}
-              className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all flex items-center justify-center gap-1 font-bold text-[10px]"
-              title="Tout en bas"
-            >
-              <ArrowDown className="w-3.5 h-3.5" /> Bas
-            </button>
+            {/* If in segmented view, quick block links */}
+            {viewMode === 'segmented' && fichesGroupedByBlockAndModule.length > 0 && (
+              <div className="flex flex-col gap-1.5 border-t border-slate-800 pt-2 max-h-[140px] overflow-y-auto no-scrollbar">
+                <p className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Sauts de Blocs :</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {fichesGroupedByBlockAndModule.map(group => (
+                    <button
+                      key={group.blockCode}
+                      onClick={() => {
+                        const el = document.getElementById(`scroll-block-${group.blockCode}`);
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          triggerToast(`Défilé vers le bloc : ${group.blockCode} 📍`, "info");
+                          if (!expandedBlocks[group.blockCode]) {
+                            toggleBlockExpanded(group.blockCode);
+                          }
+                        } else {
+                          triggerToast("Bloc non présent dans la vue actuelle", "info");
+                        }
+                      }}
+                      className="p-1 text-[9px] font-black uppercase text-slate-300 bg-slate-800 rounded-md hover:bg-slate-700 transition-colors cursor-pointer"
+                    >
+                      {group.blockCode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Scroll controls */}
+            <div className="flex items-center justify-between gap-2 border-t border-slate-800 pt-2">
+              <button
+                onClick={() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  triggerToast("⬆️ Défilement tout en haut !", "info");
+                }}
+                className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all flex items-center justify-center gap-1 font-bold text-[10px] cursor-pointer"
+                title="Tout en haut"
+              >
+                <ArrowUp className="w-3.5 h-3.5" /> Haut
+              </button>
+              <button
+                onClick={() => {
+                  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                  triggerToast("⬇️ Défilement tout en bas !", "info");
+                }}
+                className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all flex items-center justify-center gap-1 font-bold text-[10px] cursor-pointer"
+                title="Tout en bas"
+              >
+                <ArrowDown className="w-3.5 h-3.5" /> Bas
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          /* Collapsed Bubble - A beautiful "Little box" */
+          <button
+            onClick={() => setElevatorExpanded(true)}
+            className="w-12 h-12 bg-slate-900 border border-slate-750 hover:bg-slate-850 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer ring-4 ring-blue-500/20"
+            title="Ouvrir l'ascenseur de navigation"
+          >
+            <Compass className="w-6 h-6 text-blue-400 animate-pulse" />
+          </button>
+        )}
       </div>
 
       {false && (
@@ -2227,8 +2406,14 @@ export default function App() {
                             Ouvrir externe ↗
                           </a>
                           <button
+                            onClick={() => setPreviewHeight(prev => prev === 'compact' ? 'large' : 'compact')}
+                            className="p-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-all text-[11px] flex items-center gap-1 font-extrabold cursor-pointer border border-slate-700 shadow-sm"
+                          >
+                            {previewHeight === 'compact' ? '↕️ Mode Plein Écran' : '↕️ Mode Compact'}
+                          </button>
+                          <button
                             onClick={() => setSelectedResourceForPreview(null)}
-                            className="text-white font-black text-xs p-1 px-2.5 bg-red-650 hover:bg-red-650 rounded-lg transition-all cursor-pointer shadow-sm bg-red-600"
+                            className="text-white font-black text-xs p-1 px-2.5 bg-red-650 hover:bg-red-650 rounded-lg transition-all cursor-pointer shadow-sm bg-red-605"
                           >
                             Fermer le lecteur ✕
                           </button>
@@ -2273,7 +2458,9 @@ export default function App() {
                           )}
                         </div>
                       ) : getDriveEmbedUrl(selectedResourceForPreview.url) ? (
-                        <div className="w-full h-[450px] relative rounded-xl overflow-hidden bg-slate-905 border border-slate-800">
+                        <div className={`w-full relative rounded-xl overflow-hidden bg-slate-905 border border-slate-800 transition-all duration-300 ${
+                          previewHeight === 'compact' ? 'h-[280px]' : 'h-[550px]'
+                        }`}>
                           <iframe 
                             src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
                             className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
