@@ -4,6 +4,7 @@ import { Fiche, FicheStatus } from './types';
 import ThreeDBox from './components/ThreeDBox';
 import ResourcePlayer from './components/ResourcePlayer';
 import CsvLoader from './components/CsvLoader';
+import SpeechReaderModal from './components/SpeechReaderModal';
 import {
   BarChart,
   Bar,
@@ -132,6 +133,7 @@ export default function App() {
   } | null>(null);
 
   const [editingPdfFicheId, setEditingPdfFicheId] = useState<number | null>(null);
+  const [selectedSpeechFiche, setSelectedSpeechFiche] = useState<Fiche | null>(null);
 
   const handleAssignPdfUrl = (id: number, url: string) => {
     setFiches(prev => prev.map(f => {
@@ -830,9 +832,18 @@ export default function App() {
                               </span>
                             )}
                           </div>
-                          <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-150">
-                            N° {fiche.id}
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              onClick={() => setSelectedSpeechFiche(fiche)}
+                              className="px-2 py-0.5 bg-gradient-to-r from-[#4285F4] to-indigo-600 hover:from-blue-600 hover:to-indigo-750 text-white rounded-md text-[10px] font-black uppercase tracking-wider flex items-center gap-1 hover:scale-105 active:scale-95 transition-all shadow-sm cursor-pointer select-none"
+                              title="Écouter le résumé de la fiche à haute voix"
+                            >
+                              <Volume2 className="w-3.5 h-3.5" /> Écouter 🔊
+                            </button>
+                            <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-150">
+                              N° {fiche.id}
+                            </span>
+                          </div>
                         </div>
 
                         <h3 className="font-extrabold text-slate-900 text-base md:text-lg lg:text-xl leading-tight mt-1 text-balance">
@@ -880,17 +891,23 @@ export default function App() {
                           {(['A faire', 'En cours', 'Fait'] as FicheStatus[]).map(status => {
                             const isActive = currentStatus === status;
                             const getStatusStyle = () => {
-                              if (!isActive) return 'text-slate-650 hover:bg-white/60';
-                              if (status === 'Fait') return 'bg-[#34A853] text-white font-black shadow-md scale-[1.02]';
-                              if (status === 'En cours') return 'bg-[#FBBC05] text-[#1e293b] font-black shadow-md scale-[1.02]';
-                              return 'bg-slate-400 text-white font-black shadow-md scale-[1.02]';
+                              if (!isActive) {
+                                if (status === 'Fait') return 'text-[#34A853]/90 bg-white/40 hover:bg-[#34A853]/10 hover:text-[#34A853]';
+                                if (status === 'En cours') return 'text-[#b7791f] bg-white/40 hover:bg-[#FBBC05]/15 hover:text-[#b7791f]';
+                                return 'text-[#EA4335]/90 bg-white/40 hover:bg-[#EA4335]/10 hover:text-[#EA4335]';
+                              }
+                              if (status === 'Fait') return 'bg-[#34A853] text-white font-black shadow-md scale-[1.04] ring-2 ring-[#34A853]/20';
+                              if (status === 'En cours') return 'bg-[#FBBC05] text-slate-900 font-black shadow-md scale-[1.04] ring-2 ring-[#FBBC05]/20';
+                              return 'bg-[#EA4335] text-white font-black shadow-md scale-[1.04] ring-2 ring-[#EA4335]/20';
                             };
 
                             return (
                               <button
                                 key={status}
                                 onClick={() => handleStatusChange(fiche.id, activeZone, status)}
-                                className={`py-1.5 rounded-lg text-[10.5px] text-center select-none cursor-pointer tracking-tight transition-all duration-300 font-bold hover:scale-[1.01] ${getStatusStyle()}`}
+                                className={`py-1.5 rounded-lg text-[10.5px] text-center select-none cursor-pointer tracking-tight transition-all duration-350 font-bold hover:scale-[1.02] border border-transparent ${
+                                  isActive ? 'border-slate-950/5' : 'border-slate-200/40'
+                                } ${getStatusStyle()}`}
                               >
                                 {status === 'Fait' ? 'Fait ✔' : status === 'En cours' ? 'En cours ⏳' : 'À faire 💤'}
                               </button>
@@ -1221,6 +1238,13 @@ export default function App() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setSelectedSpeechFiche(fiche)}
+                            className="p-1 px-2.5 bg-gradient-to-r from-[#4285F4] to-indigo-600 hover:from-blue-600 hover:to-indigo-750 text-white rounded-lg transition-all text-[11px] flex items-center gap-1 font-bold border border-transparent shadow hover:scale-105 active:scale-95 cursor-pointer selection:none"
+                            title="Ouvrir le liseur vocal intelligent pour lire ce document à haute voix"
+                          >
+                            <Volume2 className="w-3.5 h-3.5" /> Lire à haute voix 🔊
+                          </button>
                           <a
                             href={selectedResourceForPreview.url}
                             target="_blank"
@@ -1327,6 +1351,12 @@ export default function App() {
           </p>
         </div>
       </footer>
+
+      <SpeechReaderModal
+        fiche={selectedSpeechFiche}
+        isOpen={selectedSpeechFiche !== null}
+        onClose={() => setSelectedSpeechFiche(null)}
+      />
     </div>
   );
 }
