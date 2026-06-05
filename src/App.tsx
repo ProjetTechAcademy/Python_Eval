@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { initialFiches } from './data/initialData';
+import { initialFiches, EVAL_FICHES_IDS } from './data/initialData';
 import { Fiche, FicheStatus } from './types';
 import ThreeDBox from './components/ThreeDBox';
 import ResourcePlayer from './components/ResourcePlayer';
@@ -119,12 +119,12 @@ export default function App() {
       }
     }
     return list.map(f => {
-      const belongsToAB = (f.id >= 188 && f.id <= 342) || f.id === 329 || f.id === 333 || f.id === 335 || f.id === 338 || f.id === 340 || f.id === 342;
+      const isEvalFiche = EVAL_FICHES_IDS.has(f.id);
       return {
         ...f,
         status3: f.status3 || 'A faire',
-        inZoneA: f.inZoneA !== undefined ? f.inZoneA : belongsToAB,
-        inZoneB: f.inZoneB !== undefined ? f.inZoneB : belongsToAB,
+        inZoneA: isEvalFiche ? (f.inZoneA !== undefined ? f.inZoneA : true) : false,
+        inZoneB: isEvalFiche ? (f.inZoneB !== undefined ? f.inZoneB : true) : false,
         inZoneC: f.inZoneC !== undefined ? f.inZoneC : true,
       };
     });

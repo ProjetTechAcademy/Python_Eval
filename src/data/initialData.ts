@@ -486,3 +486,5 @@ export const initialFiches: Fiche[] = [
     coursFile: "342_Py_B3_M13_S005_Documentation de l'architecture et du code.pdf"
   }
 ];
+
+export const EVAL_FICHES_IDS = new Set(initialFiches.map(f => f.id));

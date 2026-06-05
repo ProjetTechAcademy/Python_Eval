@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Download, FileSpreadsheet, Check, AlertCircle, RefreshCw, Upload, Copy, HelpCircle } from 'lucide-react';
 import { Fiche, FicheStatus } from '../types';
-import { initialFiches } from '../data/initialData';
+import { initialFiches, EVAL_FICHES_IDS } from '../data/initialData';
 
 interface CsvLoaderProps {
   onDataLoaded: (data: Fiche[]) => void;
@@ -273,7 +273,7 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
     const up = mergedMap[id] || {};
     
     // Default fallback zone memberships for common files of Bloc 3
-    const belongsToAB = (id >= 188 && id <= 342) || id === 329 || id === 333 || id === 335 || id === 338 || id === 340 || id === 342;
+    const isEvalFiche = EVAL_FICHES_IDS.has(id);
     
     const baseMerged = {
       id,
@@ -291,8 +291,8 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
 
     return {
       ...baseMerged,
-      inZoneA: up.inZoneA !== undefined ? up.inZoneA : belongsToAB,
-      inZoneB: up.inZoneB !== undefined ? up.inZoneB : belongsToAB,
+      inZoneA: isEvalFiche ? (up.inZoneA !== undefined ? up.inZoneA : true) : false,
+      inZoneB: isEvalFiche ? (up.inZoneB !== undefined ? up.inZoneB : true) : false,
       inZoneC: up.inZoneC !== undefined ? up.inZoneC : true,
     } as Fiche;
   });
