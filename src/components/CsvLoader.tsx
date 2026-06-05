@@ -21,14 +21,30 @@ export const parseSingleTextToSheet = (text: string) => {
     throw new Error('Le CSV est vide ou invalide.');
   }
 
+  // Strip Byte Order Mark (BOM) if present from Excel exports
+  const cleanText = text.replace(/^\uFEFF/, "");
+
+  // Auto-detect delimiter
+  let delimiter = ',';
+  const prefixSample = cleanText.slice(0, 2000);
+  const commaCount = (prefixSample.match(/,/g) || []).length;
+  const semicolonCount = (prefixSample.match(/;/g) || []).length;
+  const tabCount = (prefixSample.match(/\t/g) || []).length;
+
+  if (semicolonCount > commaCount && semicolonCount > tabCount) {
+    delimiter = ';';
+  } else if (tabCount > commaCount && tabCount > semicolonCount) {
+    delimiter = '\t';
+  }
+
   const rows: string[][] = [];
   let currentRow: string[] = [];
   let insideQuote = false;
   let currentVal = '';
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const nextChar = text[i + 1];
+  for (let i = 0; i < cleanText.length; i++) {
+    const char = cleanText[i];
+    const nextChar = cleanText[i + 1];
 
     if (char === '"') {
       if (insideQuote && nextChar === '"') {
@@ -37,7 +53,7 @@ export const parseSingleTextToSheet = (text: string) => {
       } else {
         insideQuote = !insideQuote;
       }
-    } else if (char === ',' && !insideQuote) {
+    } else if (char === delimiter && !insideQuote) {
       currentRow.push(currentVal.trim());
       currentVal = '';
     } else if ((char === '\r' || char === '\n') && !insideQuote) {
@@ -77,14 +93,28 @@ export const parseSingleTextToSheet = (text: string) => {
     }
   }
 
-  // Find headers row starting with N° or N
+  // Find headers row containing "titre" or typical ID tags
   let headers: string[] = [];
   let headersIndex = -1;
   for (let i = 0; i < Math.min(15, rows.length); i++) {
     const row = rows[i];
     if (row.length === 0 || !row[0]) continue;
-    const firstCell = row[0].trim();
-    if (firstCell === 'N°' || firstCell === 'N') {
+    const firstCell = row[0].trim().toLowerCase();
+    const hasTitre = row.some(cell => {
+      const c = cell.trim().toLowerCase();
+      return c.includes('titre') || c.includes('title') || c.includes('fiche');
+    });
+
+    const isHeaderStart = 
+      firstCell === 'n°' || 
+      firstCell === 'n' || 
+      firstCell === '#' || 
+      firstCell === 'id' || 
+      firstCell.startsWith('n°') || 
+      firstCell.startsWith('num') || 
+      firstCell.startsWith('no');
+
+    if (hasTitre || isHeaderStart) {
       headers = row.map(h => h.trim().toLowerCase());
       headersIndex = i;
       break;
@@ -142,8 +172,15 @@ export const parseSingleTextToSheet = (text: string) => {
         record.motorsLink = val;
       } else if (header.includes('date')) {
         record.date = val;
-      } else if (header.includes('fait') || header.includes('fait ?')) {
-        record.status = (val.toLowerCase().includes('en cours') ? 'En cours' : val.toLowerCase().includes('fait') ? 'Fait' : 'A faire');
+      } else if (header.includes('fait') || header.includes('statut') || header.includes('status')) {
+        const v = val.toLowerCase().trim();
+        if (v === 'fait' || v === 'oui' || v === 'yes' || v === 'terminé' || v === 'complete' || v.startsWith('fait') || v === 'checked' || v === 'ok') {
+          record.status = 'Fait';
+        } else if (v.includes('cours') || v === 'en cours' || v === 'progress' || v === 'doing' || v === 'started') {
+          record.status = 'En cours';
+        } else {
+          record.status = 'A faire';
+        }
       } else if (header.includes('cours')) {
         if (val.startsWith('http')) {
           record.coursFileUrl = val;
@@ -199,6 +236,7 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
       if (rec.action) m.action = rec.action;
       if (rec.motorsLink) m.motorsLink = rec.motorsLink;
       if (rec.studi) m.studi = rec.studi;
+      if (rec.coursFile) m.coursFile = rec.coursFile;
 
       // Infer topic
       if (rec.title) {
@@ -301,7 +339,9 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
 };
 
 export default function CsvLoader({ onDataLoaded, currentCount, currentList }: CsvLoaderProps) {
-  const [csvUrl, setCsvUrl] = useState('https://docs.google.com/spreadsheets/d/e/2PACX-1vS9upnowMIAhXQO5l7H-m9dfBtytEEugAA_ChZthJRiKILpUNJgrCSHHvQXRt_0QNF-2Sb8ie7gfi0L/pub?output=csv');
+  const [csvUrl, setCsvUrl] = useState(() => {
+    return localStorage.getItem('m-motors-spreadsheet-url') || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS9upnowMIAhXQO5l7H-m9dfBtytEEugAA_ChZthJRiKILpUNJgrCSHHvQXRt_0QNF-2Sb8ie7gfi0L/pub?output=csv';
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [rawText, setRawText] = useState('');
@@ -335,42 +375,49 @@ export default function CsvLoader({ onDataLoaded, currentCount, currentList }: C
     
     try {
       const base = getBasePubUrl(csvUrl);
-      if (base) {
+      const isDefaultUrl = csvUrl.includes("2PACX-1vS9upnowMIAhXQO5l7H-m9dfBtytEEugAA_ChZthJRiKILpUNJgrCSHHvQXRt_0QNF-2Sb8ie7gfi0L");
+
+      // Save custom url to localStorage so background sync doesn't overwrite it
+      localStorage.setItem('m-motors-spreadsheet-url', csvUrl);
+
+      const fetchText = async (urlStr: string) => {
+        const res = await fetch(urlStr + (urlStr.includes('?') ? '&' : '?') + 't=' + Date.now());
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+      };
+
+      if (base && isDefaultUrl) {
         setStatusMessage({ type: 'info', text: 'Récupération simultanée des Zones A, B et C...' });
-        
-        const fetchText = async (urlStr: string) => {
-          const res = await fetch(urlStr + (urlStr.includes('?') ? '&' : '?') + 't=' + Date.now());
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.text();
-        };
+        try {
+          const [textC, textA, textB] = await Promise.all([
+            fetchText(`${base}?output=csv&gid=1056100740`),
+            fetchText(`${base}?output=csv&gid=0`),
+            fetchText(`${base}?output=csv&gid=531214884`)
+          ]);
 
-        const [textC, textA, textB] = await Promise.all([
-          fetchText(`${base}?output=csv&gid=1056100740`),
-          fetchText(`${base}?output=csv&gid=0`),
-          fetchText(`${base}?output=csv&gid=531214884`)
-        ]);
+          const sheetC = parseSingleTextToSheet(textC);
+          const sheetA = parseSingleTextToSheet(textA);
+          const sheetB = parseSingleTextToSheet(textB);
 
-        const sheetC = parseSingleTextToSheet(textC);
-        const sheetA = parseSingleTextToSheet(textA);
-        const sheetB = parseSingleTextToSheet(textB);
-
-        const merged = mergeSheets([sheetC, sheetA, sheetB], currentList || initialFiches);
-        onDataLoaded(merged);
-        setStatusMessage({
-          type: 'success',
-          text: `Félicitations ! ${merged.length} fiches synchronisées en fusionnant simultanément les dossiers Zone A (Vos progrès), Zone B (Jury) et Zone C (Commun) ! 🌐🎓`
-        });
-        setRawText(textA);
-      } else {
-        const response = await fetch(csvUrl + (csvUrl.includes('?') ? '&' : '?') + 't=' + Date.now());
-        if (!response.ok) {
-          throw new Error(`Le serveur a renvoyé une erreur HTTP ${response.status}`);
+          const merged = mergeSheets([sheetC, sheetA, sheetB], currentList || initialFiches);
+          onDataLoaded(merged);
+          setStatusMessage({
+            type: 'success',
+            text: `Félicitations ! ${merged.length} fiches synchronisées en fusionnant simultanément les dossiers Zone A (Vos progrès), Zone B (Jury) et Zone C (Commun) ! 🌐🎓`
+          });
+          setRawText(textA);
+          return;
+        } catch (err) {
+          console.warn("Failed to fetch multi-gid from default url, falling back to direct URL", err);
         }
-        const text = await response.text();
-        const success = parseCsvContent(text);
-        if (success) {
-          setRawText(text);
-        }
+      }
+
+      // Custom URL or single-sheet fallback
+      setStatusMessage({ type: 'info', text: 'Récupération de la feuille de calcul directe...' });
+      const text = await fetchText(csvUrl);
+      const success = parseCsvContent(text);
+      if (success) {
+        setRawText(text);
       }
     } catch (error: any) {
       console.warn('Direct dynamic fetch failed', error);

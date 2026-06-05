@@ -135,6 +135,17 @@ export default function App() {
   const [selectedTopic, setSelectedTopic] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [showSyncPanel, setShowSyncPanel] = useState(false);
+  
+  // Custom display option: show all 154 fiches in Zone A & B, or restrict to 45 eval fiches
+  const [showAllUnderZones, setShowAllUnderZones] = useState<boolean>(() => {
+    const saved = localStorage.getItem('m-motors-show-all-under-zones');
+    return saved === 'true'; // Default to false (only 45 evaluation fiches shown)
+  });
+
+  useEffect(() => {
+    localStorage.setItem('m-motors-show-all-under-zones', showAllUnderZones ? 'true' : 'false');
+  }, [showAllUnderZones]);
+
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
   const [selectedResourceForPreview, setSelectedResourceForPreview] = useState<{
     title: string;
@@ -146,6 +157,7 @@ export default function App() {
 
   const [previewHeight, setPreviewHeight] = useState<'compact' | 'large'>('compact'); // Default to compact (thinner) view as feedback requested
   const [elevatorExpanded, setElevatorExpanded] = useState(false); // Starts collapsed for maximum uncluttered space
+  const [guideOpen, setGuideOpen] = useState<boolean>(true); // Guide panel visibility toggle
 
   // Sticky Notes State with helpful default study tips (Sherwood note deleted permanently as requested)
   const [stickyNotes, setStickyNotes] = useState<{ id: string; text: string; color: 'green' | 'yellow' | 'blue' | 'pink' }[]>(() => {
@@ -204,9 +216,9 @@ export default function App() {
     const autoSyncSpreadsheet = async () => {
       setIsAutoSyncing(true);
       try {
-        const spreadsheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS9upnowMIAhXQO5l7H-m9dfBtytEEugAA_ChZthJRiKILpUNJgrCSHHvQXRt_0QNF-2Sb8ie7gfi0L/pub?output=csv';
+        const spreadsheetUrl = localStorage.getItem('m-motors-spreadsheet-url') || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS9upnowMIAhXQO5l7H-m9dfBtytEEugAA_ChZthJRiKILpUNJgrCSHHvQXRt_0QNF-2Sb8ie7gfi0L/pub?output=csv';
         const base = getBasePubUrl(spreadsheetUrl);
-        if (!base) return;
+        const isDefaultUrl = spreadsheetUrl.includes("2PACX-1vS9upnowMIAhXQO5l7H-m9dfBtytEEugAA_ChZthJRiKILpUNJgrCSHHvQXRt_0QNF-2Sb8ie7gfi0L");
 
         const fetchText = async (urlStr: string) => {
           const res = await fetch(urlStr + (urlStr.includes('?') ? '&' : '?') + 't=' + Date.now());
@@ -214,21 +226,32 @@ export default function App() {
           return res.text();
         };
 
-        const [textC, textA, textB] = await Promise.all([
-          fetchText(`${base}?output=csv&gid=1056100740`),
-          fetchText(`${base}?output=csv&gid=0`),
-          fetchText(`${base}?output=csv&gid=531214884`)
-        ]);
+        if (base && isDefaultUrl) {
+          const [textC, textA, textB] = await Promise.all([
+            fetchText(`${base}?output=csv&gid=1056100740`),
+            fetchText(`${base}?output=csv&gid=0`),
+            fetchText(`${base}?output=csv&gid=531214884`)
+          ]);
 
-        const sheetC = parseSingleTextToSheet(textC);
-        const sheetA = parseSingleTextToSheet(textA);
-        const sheetB = parseSingleTextToSheet(textB);
+          const sheetC = parseSingleTextToSheet(textC);
+          const sheetA = parseSingleTextToSheet(textA);
+          const sheetB = parseSingleTextToSheet(textB);
 
-        setFiches(current => {
-          const merged = mergeSheets([sheetC, sheetA, sheetB], current);
-          localStorage.setItem('m-motors-fiches', JSON.stringify(merged));
-          return merged;
-        });
+          setFiches(current => {
+            const merged = mergeSheets([sheetC, sheetA, sheetB], current);
+            localStorage.setItem('m-motors-fiches', JSON.stringify(merged));
+            return merged;
+          });
+        } else {
+          // Custom URL - fetch direct single sheet without default GIDs
+          const text = await fetchText(spreadsheetUrl);
+          const single = parseSingleTextToSheet(text);
+          setFiches(current => {
+            const merged = mergeSheets([single], current);
+            localStorage.setItem('m-motors-fiches', JSON.stringify(merged));
+            return merged;
+          });
+        }
         triggerToast("🚀 Synchro auto : Toutes vos fiches à jour en direct depuis Google Sheets !", "success");
       } catch (error) {
         console.warn("Background auto-sync failed, running off cached offline fiches", error);
@@ -336,8 +359,16 @@ export default function App() {
   // Calculate live stats
   const totalFichesCount = fiches.length;
 
-  const fichesInZoneA = useMemo(() => fiches.filter(f => f.inZoneA === true), [fiches]);
-  const fichesInZoneB = useMemo(() => fiches.filter(f => f.inZoneB === true), [fiches]);
+  const fichesInZoneA = useMemo(() => {
+    if (showAllUnderZones) return fiches;
+    return fiches.filter(f => f.inZoneA === true);
+  }, [fiches, showAllUnderZones]);
+
+  const fichesInZoneB = useMemo(() => {
+    if (showAllUnderZones) return fiches;
+    return fiches.filter(f => f.inZoneB === true);
+  }, [fiches, showAllUnderZones]);
+
   const fichesInZoneC = useMemo(() => fiches.filter(f => f.inZoneC === true), [fiches]);
 
   const stats1 = useMemo(() => {
@@ -1219,6 +1250,105 @@ export default function App() {
             />
           </div>
         )}
+
+        {/* INTERACTIVE COMPANION & DISPLAY TOGGLE */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-5 mb-8 shadow-xl border border-indigo-500/30 overflow-hidden relative animate-fadeIn">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full filter blur-3xl pointer-events-none -mr-20 -mt-20 anim-pulse"></div>
+          
+          <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-3 mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">💡</span>
+              <div>
+                <h4 className="font-extrabold text-sm sm:text-base text-white flex items-center gap-2">
+                  Guide d'Études & Mode d'Affichage Interactif
+                </h4>
+                <p className="text-[10px] sm:text-xs text-indigo-200">
+                  Comprendre les Zones d'évaluation, le programme des fiches et basculer à la volée !
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setGuideOpen(!guideOpen)}
+                className="py-1.5 px-3 bg-white/10 hover:bg-white/20 text-white/95 text-[10px] font-bold rounded-lg transition-all cursor-pointer border border-white/10 active:scale-95"
+              >
+                {guideOpen ? "Masquer le guide ⬆️" : "Afficher le guide ⬇️"}
+              </button>
+            </div>
+          </div>
+
+          {guideOpen && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-xs text-slate-300 leading-relaxed mb-4">
+              <div className="p-3.5 bg-blue-950/40 border border-blue-500/20 rounded-2xl">
+                <p className="font-extrabold text-blue-400 mb-1 flex items-center gap-1.5 text-xs sm:text-sm">
+                  <span className="text-sm">🎯</span> Zone A: Moi (Vos Progrès)
+                </p>
+                <p className="text-[11px] text-slate-350">
+                  Fiches associées à votre progression personnelle. {showAllUnderZones ? "Actuellement configuré pour afficher" : "Filtré pour n'afficher que"} les <strong>{showAllUnderZones ? "154" : "45"}</strong> cours et livrables d'examen requis.
+                </p>
+              </div>
+              
+              <div className="p-3.5 bg-red-950/45 border border-red-500/20 rounded-2xl">
+                <p className="font-extrabold text-red-400 mb-1 flex items-center gap-1.5 text-xs sm:text-sm">
+                  <span className="text-sm">⚖️</span> Zone B: Jury (Réponses Jury)
+                </p>
+                <p className="text-[11px] text-slate-350">
+                  Fiches représentant les livrables que le jury va évaluer. Corrèle directement avec les critères d'examen du dossier de soutenance.
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/20 rounded-2xl">
+                <p className="font-extrabold text-emerald-400 mb-1 flex items-center gap-1.5 text-xs sm:text-sm">
+                  <span className="text-sm">🌐</span> Zone C: Commune (154 cours)
+                </p>
+                <p className="text-[11px] text-slate-350">
+                  Tracé transversal neutre complet. Contient l'intégralité absolue du cours Flask, Python et bases de données pour M-Motors.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* CHANGER LE MODE D'AFFICHAGE EN DIRECT */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white/[0.04] p-4 rounded-2xl border border-white/5 mt-2">
+            <div className="flex flex-col gap-0.5 max-w-lg">
+              <p className="text-xs font-black text-indigo-300 uppercase tracking-widest flex items-center gap-1">
+                ⚙️ Ajustement dynamique du filtre de Zone A & B :
+              </p>
+              <p className="text-[11px] text-slate-300">
+                Préférez-vous n'afficher que les <strong>45 fiches livrables prioritaires d'examen</strong> ou voir <strong>l'intégralité du programme (154 fiches)</strong> dans vos zones d'évaluation ? (Sélectionnez votre choix ci-contre)
+              </p>
+            </div>
+            
+            <div className="flex gap-2 shrink-0 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
+              <button
+                onClick={() => {
+                  setShowAllUnderZones(false);
+                  triggerToast("Filtre activé : 45 fiches prioritaires d'examen uniquement ! 📝", "success");
+                }}
+                className={`py-1.5 px-3 sm:px-4 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                  !showAllUnderZones
+                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow font-black scale-102"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                📝 Évaluations (45)
+              </button>
+              <button
+                onClick={() => {
+                  setShowAllUnderZones(true);
+                  triggerToast("Filtre désactivé : Toutes les 154 fiches affichées partout ! 📂", "success");
+                }}
+                className={`py-1.5 px-3 sm:px-4 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                  showAllUnderZones
+                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow font-black scale-102"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                📂 Tout afficher (154)
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* 1. OVERALL STATS BENTO BOARD */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 col-spa-3">
