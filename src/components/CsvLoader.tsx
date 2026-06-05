@@ -15,203 +15,292 @@ export default function CsvLoader({ onDataLoaded, currentCount }: CsvLoaderProps
   const [rawText, setRawText] = useState('');
   const [showPasteArea, setShowPasteArea] = useState(false);
 
-  // Parse CSV helper
-  const parseCsvContent = (text: string) => {
-    try {
-      if (!text || text.trim().length === 0) {
-        throw new Error('Le CSV est vide ou invalide.');
-      }
+  // Parse a single CSV sheet of rows into a worksheet object
+  const parseSingleTextToSheet = (text: string) => {
+    if (!text || text.trim().length === 0) {
+      throw new Error('Le CSV est vide ou invalide.');
+    }
 
-      const rows: string[][] = [];
-      let currentRow: string[] = [];
-      let insideQuote = false;
-      let currentVal = '';
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let insideQuote = false;
+    let currentVal = '';
 
-      for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        const nextChar = text[i + 1];
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
 
-        if (char === '"') {
-          if (insideQuote && nextChar === '"') {
-            currentVal += '"';
-            i++; // Skip next quote
-          } else {
-            insideQuote = !insideQuote;
-          }
-        } else if (char === ',' && !insideQuote) {
-          currentRow.push(currentVal.trim());
-          currentVal = '';
-        } else if ((char === '\r' || char === '\n') && !insideQuote) {
-          if (char === '\r' && nextChar === '\n') {
-            i++;
-          }
-          currentRow.push(currentVal.trim());
-          rows.push(currentRow);
-          currentRow = [];
-          currentVal = '';
+      if (char === '"') {
+        if (insideQuote && nextChar === '"') {
+          currentVal += '"';
+          i++; // Skip next quote
         } else {
-          currentVal += char;
+          insideQuote = !insideQuote;
         }
-      }
-      if (currentVal || currentRow.length > 0) {
+      } else if (char === ',' && !insideQuote) {
+        currentRow.push(currentVal.trim());
+        currentVal = '';
+      } else if ((char === '\r' || char === '\n') && !insideQuote) {
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
         currentRow.push(currentVal.trim());
         rows.push(currentRow);
+        currentRow = [];
+        currentVal = '';
+      } else {
+        currentVal += char;
       }
+    }
+    if (currentVal || currentRow.length > 0) {
+      currentRow.push(currentVal.trim());
+      rows.push(currentRow);
+    }
 
-      // Filter and trace columns
-      if (rows.length < 5) {
-        throw new Error('Format invalide. Le fichier contient trop peu de lignes.');
+    if (rows.length < 3) {
+      throw new Error('Format invalide. Trop peu de lignes.');
+    }
+
+    // Detect section
+    let section: 'eval0' | 'eval1' | 'eval2' = 'eval0';
+    for (let i = 0; i < Math.min(10, rows.length); i++) {
+      const lineJoined = rows[i].join(',');
+      if (lineJoined.includes('Python_Eval_1') || lineJoined.includes('audio_1') || lineJoined.includes('Audio_1')) {
+        section = 'eval1';
+        break;
+      } else if (lineJoined.includes('Python_Eval_2') || lineJoined.includes('audio_2') || lineJoined.includes('Audio_2')) {
+        section = 'eval2';
+        break;
+      } else if (lineJoined.includes('Python_Eval_0') || lineJoined.includes('audio_0') || lineJoined.includes('Audio_0')) {
+        section = 'eval0';
+        break;
       }
+    }
 
-      // We have multiple segments: Python_Eval_1 and Python_Eval_2
-      // Let's create an advanced mapper to stitch Tab1 and Tab2 values together!
-      const fichesMap: Record<number, Partial<Fiche>> = {};
+    // Find headers row starting with N° or N
+    let headers: string[] = [];
+    let headersIndex = -1;
+    for (let i = 0; i < Math.min(15, rows.length); i++) {
+      const row = rows[i];
+      if (row.length === 0 || !row[0]) continue;
+      const firstCell = row[0].trim();
+      if (firstCell === 'N°' || firstCell === 'N') {
+        headers = row.map(h => h.trim().toLowerCase());
+        headersIndex = i;
+        break;
+      }
+    }
 
-      let currentSection: 'unknown' | 'eval1' | 'eval2' = 'unknown';
-      let headers: string[] = [];
+    if (headers.length === 0) {
+      headers = ['n°', 'titre', 'action', 'devoir', 'date', 'fait', 'cours', 'audio', 'slide', 'video', 'image', 'nblm'];
+    }
 
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        if (row.length === 0 || !row[0]) continue;
+    // Double check section using exact columns names
+    headers.forEach(h => {
+      if (h.includes('_1') || h.includes('audio_1') || h.includes('slide_1')) section = 'eval1';
+      if (h.includes('_2') || h.includes('audio_2') || h.includes('slide_2')) section = 'eval2';
+      if (h.includes('_0') || h.includes('audio_0') || h.includes('slide_0')) section = 'eval0';
+    });
 
-        const firstCell = row[0].trim();
+    const records: Record<number, any> = {};
 
-        if (firstCell.includes('Python_Eval_1')) {
-          currentSection = 'eval1';
-          headers = [];
-          continue;
-        } else if (firstCell.includes('Python_Eval_2')) {
-          currentSection = 'eval2';
-          headers = [];
-          continue;
-        }
+    for (let i = headersIndex + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.length === 0 || !row[0]) continue;
 
-        if (firstCell === 'N°' || firstCell === 'N') {
-          headers = row.map(h => h.trim().toLowerCase());
-          continue;
-        }
+      const firstCell = row[0].trim();
+      const idNum = parseInt(firstCell, 10);
+      if (isNaN(idNum)) continue;
 
-        const idNum = parseInt(firstCell, 10);
-        if (isNaN(idNum)) continue; // Skip header/non-numeric rows
+      const record: any = {
+        id: idNum,
+        title: '',
+        action: '',
+        motorsLink: '',
+        date: '',
+        status: 'A faire',
+        coursFileUrl: '',
+        audio: '',
+        slide: '',
+        video: '',
+        image: '',
+        nblm: '',
+        studi: '',
+        suivi: ''
+      };
 
-        if (!fichesMap[idNum]) {
-          fichesMap[idNum] = {
-            id: idNum,
-            title: '',
-            action: '',
-            motorsLink: '',
-            status1: 'A faire',
-            status2: 'A faire',
-            coursFile: `${idNum}_pdf_doc.pdf`,
-          };
-        }
+      headers.forEach((header, index) => {
+        if (index >= row.length) return;
+        const val = row[index].trim();
+        if (!val) return;
 
-        const currentFiche = fichesMap[idNum];
-
-        // Map values depending on current evaluation block
-        headers.forEach((header, index) => {
-          if (index >= row.length) return;
-          const val = row[index];
-          if (!val) return;
-
-          if (header.includes('titre')) {
-            currentFiche.title = val;
-            // Infer topic from title
-            if (val.includes('_M03_')) {
-              if (val.includes('_S018_') || val.includes('_S019_') || val.includes('_S020_') || val.includes('_S021_')) {
-                currentFiche.topic = 'Bootstrap';
-              } else {
-                currentFiche.topic = 'HTML & CSS';
-              }
-            } else if (val.includes('_M06_')) {
-              currentFiche.topic = 'Bases de Données';
-            } else if (val.includes('_M08_')) {
-              if (val.includes('_S010_') || val.includes('_S021_') || val.includes('_S024_') || val.includes('_S025_') || val.includes('_S026_')) {
-                currentFiche.topic = 'Python Quality & Flask';
-              } else {
-                currentFiche.topic = 'Python Backend';
-              }
-            } else if (val.includes('_M10_') || val.includes('_M12_') || val.includes('_M13_')) {
-              currentFiche.topic = 'APIs, Git & Sécurité';
-            } else {
-              currentFiche.topic = 'Autre';
-            }
-          } else if (header.includes('action')) {
-            currentFiche.action = val;
-          } else if (header.includes('devoir') || header.includes('motors') || header.includes('lien direct')) {
-            currentFiche.motorsLink = val;
-          } else if (header.includes('date')) {
-            if (currentSection === 'eval1') {
-              currentFiche.date1 = val;
-            } else {
-              currentFiche.date2 = val;
-            }
-          } else if (header.includes('fait')) {
-            const parsedStatus = (val.toLowerCase().includes('en cours') ? 'En cours' : val.toLowerCase().includes('fait') ? 'Fait' : 'A faire') as FicheStatus;
-            if (currentSection === 'eval1') {
-              currentFiche.status1 = parsedStatus;
-            } else {
-              currentFiche.status2 = parsedStatus;
-            }
-          } else if (header.includes('cours')) {
-            currentFiche.coursFile = val;
-          } else if (header.includes('studi')) {
-            currentFiche.studi = val;
-          } else if (header.includes('suivi')) {
-            if (currentSection === 'eval1') {
-              currentFiche.suivi1 = val;
-            } else {
-              currentFiche.suivi2 = val;
-            }
-          }
-
-          // Tab Specific resources
-          if (currentSection === 'eval1') {
-            if (header.includes('audio')) currentFiche.audio1 = val;
-            if (header.includes('slide')) currentFiche.slide1 = val;
-            if (header.includes('vidéo') || header.includes('video')) currentFiche.video1 = val;
-            if (header.includes('image')) currentFiche.image1 = val;
-            if (header.includes('nblm')) currentFiche.nblm1 = val;
+        if (header.includes('titre')) {
+          record.title = val;
+        } else if (header.includes('action')) {
+          record.action = val;
+        } else if (header.includes('devoir') || header.includes('motors') || header.includes('lien direct')) {
+          record.motorsLink = val;
+        } else if (header.includes('date')) {
+          record.date = val;
+        } else if (header.includes('fait') || header.includes('fait ?')) {
+          record.status = (val.toLowerCase().includes('en cours') ? 'En cours' : val.toLowerCase().includes('fait') ? 'Fait' : 'A faire');
+        } else if (header.includes('cours')) {
+          if (val.startsWith('http')) {
+            record.coursFileUrl = val;
           } else {
-            if (header.includes('audio')) currentFiche.audio2 = val;
-            if (header.includes('slide')) currentFiche.slide2 = val;
-            if (header.includes('vidéo') || header.includes('video')) currentFiche.video2 = val;
-            if (header.includes('image')) currentFiche.image2 = val;
-            if (header.includes('nblm')) currentFiche.nblm2 = val;
+            record.coursFile = val;
           }
-        });
-      }
-
-      const list = Object.values(fichesMap) as Fiche[];
-      
-      if (list.length === 0) {
-        throw new Error("Aucune fiche d'évaluation n'a pu être extraite. Vérifiez l'en-tête de colonnes ('N°', 'Titre de la Fiche').");
-      }
-
-      // Sort list by ID
-      list.sort((a, b) => a.id - b.id);
-
-      // Backfill missing titles or values based on course details if empty
-      const stitchedList = list.map(item => {
-        const foundOriginal = initialFiches.find(orig => orig.id === item.id);
-        if (foundOriginal) {
-          return {
-            ...foundOriginal,
-            ...item,
-            // Merge nested items if custom was empty
-            title: item.title || foundOriginal.title,
-            action: item.action || foundOriginal.action,
-            motorsLink: item.motorsLink || foundOriginal.motorsLink,
-            topic: item.topic || foundOriginal.topic,
-          };
+        } else if (header.includes('audio')) {
+          record.audio = val;
+        } else if (header.includes('slide')) {
+          record.slide = val;
+        } else if (header.includes('vidéo') || header.includes('video')) {
+          record.video = val;
+        } else if (header.includes('image')) {
+          record.image = val;
+        } else if (header.includes('nblm')) {
+          record.nblm = val;
+        } else if (header.includes('studi')) {
+          record.studi = val;
+        } else if (header.includes('suivi')) {
+          record.suivi = val;
+        } else if (header.includes('lien') && !record.coursFileUrl && val.startsWith('http')) {
+          record.coursFileUrl = val;
         }
-        return item as Fiche;
       });
 
-      onDataLoaded(stitchedList);
+      records[idNum] = record;
+    }
+
+    return { section, records };
+  };
+
+  const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; records: Record<number, any> }[], currentList: Fiche[]): Fiche[] => {
+    const mergedMap: Record<number, Partial<Fiche>> = {};
+
+    sheets.forEach(sheet => {
+      const section = sheet.section;
+      Object.entries(sheet.records).forEach(([idStr, rec]) => {
+        const id = parseInt(idStr, 10);
+        if (isNaN(id)) return;
+
+        if (!mergedMap[id]) {
+          mergedMap[id] = { id };
+        }
+
+        const m = mergedMap[id];
+
+        if (rec.title) m.title = rec.title;
+        if (rec.action) m.action = rec.action;
+        if (rec.motorsLink) m.motorsLink = rec.motorsLink;
+        if (rec.studi) m.studi = rec.studi;
+
+        // Infer topic
+        if (rec.title) {
+          const val = rec.title;
+          if (val.includes('_M03_')) {
+            if (val.includes('_S018_') || val.includes('_S019_') || val.includes('_S020_') || val.includes('_S021_')) {
+              m.topic = 'Bootstrap';
+            } else {
+              m.topic = 'HTML & CSS';
+            }
+          } else if (val.includes('_M06_') || val.includes('_M09_')) {
+            m.topic = 'Bases de Données';
+          } else if (val.includes('_M08_')) {
+            if (val.includes('_S010_') || val.includes('_S021_') || val.includes('_S024_') || val.includes('_S025_') || val.includes('_S026_')) {
+              m.topic = 'Python Quality & Flask';
+            } else {
+              m.topic = 'Python Backend';
+            }
+          } else if (val.includes('_M10_') || val.includes('_M12_') || val.includes('_M13_')) {
+            m.topic = 'APIs, Git & Sécurité';
+          } else {
+            m.topic = 'Autre';
+          }
+        }
+
+        if (rec.coursFileUrl && rec.coursFileUrl.startsWith('http')) {
+          m.coursFileUrl = rec.coursFileUrl;
+        }
+
+        if (section === 'eval1') {
+          m.status1 = rec.status;
+          if (rec.date) m.date1 = rec.date;
+          if (rec.audio) m.audio1 = rec.audio;
+          if (rec.slide) m.slide1 = rec.slide;
+          if (rec.video) m.video1 = rec.video;
+          if (rec.image) m.image1 = rec.image;
+          if (rec.nblm) m.nblm1 = rec.nblm;
+          if (rec.suivi) m.suivi1 = rec.suivi;
+        } else if (section === 'eval2') {
+          m.status2 = rec.status;
+          if (rec.date) m.date2 = rec.date;
+          if (rec.audio) m.audio2 = rec.audio;
+          if (rec.slide) m.slide2 = rec.slide;
+          if (rec.video) m.video2 = rec.video;
+          if (rec.image) m.image2 = rec.image;
+          if (rec.nblm) m.nblm2 = rec.nblm;
+          if (rec.suivi) m.suivi2 = rec.suivi;
+        } else if (section === 'eval0') {
+          m.status3 = rec.status;
+          if (rec.date) m.date3 = rec.date;
+          if (rec.audio) m.audio3 = rec.audio;
+          if (rec.slide) m.slide3 = rec.slide;
+          if (rec.video) m.video3 = rec.video;
+          if (rec.image) m.image3 = rec.image;
+          if (rec.nblm) m.nblm3 = rec.nblm;
+          if (rec.suivi) m.suivi3 = rec.suivi;
+        }
+      });
+    });
+
+    const mergedList = currentList.map(orig => {
+      const update = mergedMap[orig.id];
+      if (update) {
+        return {
+          ...orig,
+          ...update,
+          coursFileUrl: update.coursFileUrl || orig.coursFileUrl || '',
+          status1: update.status1 || orig.status1,
+          status2: update.status2 || orig.status2,
+          status3: update.status3 || orig.status3 || 'A faire',
+        } as Fiche;
+      }
+      return orig;
+    });
+
+    Object.keys(mergedMap).forEach(idStr => {
+      const id = parseInt(idStr, 10);
+      if (!mergedList.some(f => f.id === id)) {
+        const up = mergedMap[id];
+        mergedList.push({
+          id,
+          title: up.title || `Fiche #${id}`,
+          topic: up.topic || 'Autre',
+          action: up.action || '',
+          motorsLink: up.motorsLink || '',
+          status1: up.status1 || 'A faire',
+          status2: up.status2 || 'A faire',
+          status3: up.status3 || 'A faire',
+          coursFile: `${id}_cours.pdf`,
+          coursFileUrl: up.coursFileUrl || '',
+          ...up
+        } as Fiche);
+      }
+    });
+
+    return mergedList.sort((a, b) => a.id - b.id);
+  };
+
+  const parseCsvContent = (text: string) => {
+    try {
+      const single = parseSingleTextToSheet(text);
+      const merged = mergeSheets([single], initialFiches);
+      
+      onDataLoaded(merged);
       setStatusMessage({
         type: 'success',
-        text: `Félicitations ! ${stitchedList.length} fiches synchronisées avec succès ! 🎉`
+        text: `Félicitations ! Fiche synchronisée avec succès ! (Zone: ${single.section === 'eval1' ? 'A' : single.section === 'eval2' ? 'B' : 'C'}) 🎉`
       });
       return true;
     } catch (e: any) {
@@ -224,28 +313,61 @@ export default function CsvLoader({ onDataLoaded, currentCount }: CsvLoaderProps
     }
   };
 
+  // Get base public URL
+  const getBasePubUrl = (url: string) => {
+    const match = url.match(/^(https:\/\/docs\.google\.com\/spreadsheets\/d\/e\/[a-zA-Z0-9_-]+\/pub)/);
+    return match ? match[1] : null;
+  };
+
   // 1. Dynamic fetch from the server/browser
   const fetchCsvData = async () => {
     setIsLoading(true);
-    setStatusMessage({ type: 'info', text: 'Connexion au Google Sheets et récupération...' });
+    setStatusMessage({ type: 'info', text: 'Connexion aux feuilles de calcul Google Sheets...' });
     
     try {
-      // Direct CORS fetch or using server side proxy
-      const response = await fetch(csvUrl);
-      if (!response.ok) {
-        throw new Error(`Le serveur de feuilles de calcul a renvoyé une erreur HTTP ${response.status}`);
-      }
-      const rawText = await response.text();
-      const success = parseCsvContent(rawText);
-      if (success) {
-        setRawText(rawText);
+      const base = getBasePubUrl(csvUrl);
+      if (base) {
+        setStatusMessage({ type: 'info', text: 'Récupération simultanée des Zones A, B et C...' });
+        
+        const fetchText = async (urlStr: string) => {
+          const res = await fetch(urlStr);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.text();
+        };
+
+        const [textC, textA, textB] = await Promise.all([
+          fetchText(`${base}?output=csv&gid=1056100740`),
+          fetchText(`${base}?output=csv&gid=0`),
+          fetchText(`${base}?output=csv&gid=531214884`)
+        ]);
+
+        const sheetC = parseSingleTextToSheet(textC);
+        const sheetA = parseSingleTextToSheet(textA);
+        const sheetB = parseSingleTextToSheet(textB);
+
+        const merged = mergeSheets([sheetC, sheetA, sheetB], initialFiches);
+        onDataLoaded(merged);
+        setStatusMessage({
+          type: 'success',
+          text: `Félicitations ! ${merged.length} fiches synchronisées en fusionnant simultanément les dossiers Zone A (Vos progrès), Zone B (Jury) et Zone C (Commun) ! 🌐🎓`
+        });
+        setRawText(textA);
+      } else {
+        const response = await fetch(csvUrl);
+        if (!response.ok) {
+          throw new Error(`Le serveur a renvoyé une erreur HTTP ${response.status}`);
+        }
+        const text = await response.text();
+        const success = parseCsvContent(text);
+        if (success) {
+          setRawText(text);
+        }
       }
     } catch (error: any) {
-      console.warn('Direct dynamic fetch failed, attempting client-side browser parse simulated payload', error);
-      // Let the user copy paste easily
+      console.warn('Direct dynamic fetch failed', error);
       setStatusMessage({
         type: 'error',
-        text: `Échec de récupération directe (CORS ou hors-ligne). Veuillez utiliser l'import direct de fichier CSV ou copier-coller les données ci-dessous.`
+        text: `CORS ou erreur d'accès. Veuillez copier-coller le texte directement dans l'espace ci-dessous.`
       });
       setShowPasteArea(true);
     } finally {

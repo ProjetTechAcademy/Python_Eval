@@ -26,11 +26,21 @@ export interface Fiche {
   video2?: string;
   image2?: string;
   nblm2?: string;
+
+  // Zone C / Tab 3 resources (Common)
+  status3?: FicheStatus;
+  date3?: string;
+  audio3?: string;
+  slide3?: string;
+  video3?: string;
+  image3?: string;
+  nblm3?: string;
   
   // Common resources
   studi?: string;
   suivi1?: string;
   suivi2?: string;
+  suivi3?: string;
 }
 
 export interface MetricCardConfig {

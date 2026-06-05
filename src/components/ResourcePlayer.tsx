@@ -7,7 +7,7 @@ interface ResourcePlayerProps {
   resourceName: string;
   url?: string;
   type: 'audio' | 'slide' | 'video' | 'image' | 'nblm' | 'studi';
-  zone: 'A' | 'B' | 'common';
+  zone: 'A' | 'B' | 'C' | 'common';
   onPreviewInApp?: (resource: { title: string; resourceName: string; url: string; type: string; ficheId: number }) => void;
 }
 
@@ -49,6 +49,7 @@ export default function ResourcePlayer({
   const getZoneLabel = () => {
     if (zone === 'A') return { text: 'Moi', bg: 'bg-[#4285F4]/10 text-[#4285F4] border-[#4285F4]/15' };
     if (zone === 'B') return { text: 'Jury', bg: 'bg-[#EA4335]/10 text-[#EA4335] border-[#EA4335]/15' };
+    if (zone === 'C') return { text: 'Neu.', bg: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/15' };
     return { text: 'Studi', bg: 'bg-indigo-50 text-indigo-700 border-indigo-100/50' };
   };
 

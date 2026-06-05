@@ -103,17 +103,21 @@ function getTopicLeftBorder(topic: string) {
 export default function App() {
   const [fiches, setFiches] = useState<Fiche[]>(() => {
     const local = localStorage.getItem('m-motors-fiches');
+    let list = initialFiches;
     if (local) {
       try {
-        return JSON.parse(local);
+        list = JSON.parse(local);
       } catch (e) {
-        return initialFiches;
+        list = initialFiches;
       }
     }
-    return initialFiches;
+    return list.map(f => ({
+      ...f,
+      status3: f.status3 || 'A faire'
+    }));
   });
 
-  const [activeZone, setActiveZone] = useState<'A' | 'B'>('A'); // Zone A: Personal, Zone B: Jury
+  const [activeZone, setActiveZone] = useState<'A' | 'B' | 'C'>('A'); // Zone A: Personal, Zone B: Jury, Zone C: Common
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTopic, setSelectedTopic] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
@@ -160,14 +164,15 @@ export default function App() {
   };
 
   // Status toggle handler
-  const handleStatusChange = (id: number, zone: 'A' | 'B', newStatus: FicheStatus) => {
+  const handleStatusChange = (id: number, zone: 'A' | 'B' | 'C', newStatus: FicheStatus) => {
     setFiches(prev => prev.map(f => {
       if (f.id === id) {
         if (zone === 'A') {
-          const finishedSymbol = newStatus === 'Fait' ? '🟢 Fait' : newStatus === 'En cours' ? '🟡 En cours' : '🔴 À faire';
           return { ...f, status1: newStatus, date1: newStatus === 'Fait' ? new Date().toLocaleDateString('fr-FR') : f.date1 };
-        } else {
+        } else if (zone === 'B') {
           return { ...f, status2: newStatus, date2: newStatus === 'Fait' ? new Date().toLocaleDateString('fr-FR') : f.date2 };
+        } else {
+          return { ...f, status3: newStatus, date3: newStatus === 'Fait' ? new Date().toLocaleDateString('fr-FR') : f.date3 };
         }
       }
       return f;
@@ -183,8 +188,10 @@ export default function App() {
         if (matches) {
           if (activeZone === 'A') {
             return { ...f, status1: 'Fait', date1: new Date().toLocaleDateString('fr-FR') };
-          } else {
+          } else if (activeZone === 'B') {
             return { ...f, status2: 'Fait', date2: new Date().toLocaleDateString('fr-FR') };
+          } else {
+            return { ...f, status3: 'Fait', date3: new Date().toLocaleDateString('fr-FR') };
           }
         }
         return f;
@@ -220,7 +227,19 @@ export default function App() {
     };
   }, [fiches, totalFichesCount]);
 
-  const currentStats = activeZone === 'A' ? stats1 : stats2;
+  const stats3 = useMemo(() => {
+    const fait = fiches.filter(f => (f.status3 || 'A faire') === 'Fait').length;
+    const cours = fiches.filter(f => (f.status3 || 'A faire') === 'En cours').length;
+    const faire = fiches.filter(f => (f.status3 || 'A faire') === 'A faire').length;
+    return {
+      fait,
+      cours,
+      faire,
+      pct: totalFichesCount > 0 ? Math.round((fait / totalFichesCount) * 100) : 0
+    };
+  }, [fiches, totalFichesCount]);
+
+  const currentStats = activeZone === 'A' ? stats1 : activeZone === 'B' ? stats2 : stats3;
 
   // Domain Category listing
   const topics = ['All', 'HTML & CSS', 'Bootstrap', 'Bases de Données', 'Python Backend', 'Python Quality & Flask', 'APIs, Git & Sécurité'];
@@ -229,7 +248,7 @@ export default function App() {
   const filteredFiches = useMemo(() => {
     return fiches.filter(f => {
       const matchesTopic = selectedTopic === 'All' || f.topic === selectedTopic;
-      const fStatus = activeZone === 'A' ? f.status1 : f.status2;
+      const fStatus = activeZone === 'A' ? f.status1 : activeZone === 'B' ? f.status2 : (f.status3 || 'A faire');
       const matchesStatus = selectedStatus === 'All' || fStatus === selectedStatus;
       
       const query = searchQuery.toLowerCase();
@@ -243,28 +262,30 @@ export default function App() {
     });
   }, [fiches, activeZone, selectedTopic, selectedStatus, searchQuery]);
 
-  // Recharts trend visualizer comparing Zone A and Zone B metrics by category
+  // Recharts trend visualizer comparing Zone A, Zone B and Zone C metrics by category
   const comparisonChartData = useMemo(() => {
     return topics.filter(t => t !== 'All').map(topic => {
       const subset1 = fiches.filter(f => f.topic === topic && f.status1 === 'Fait').length;
       const subset2 = fiches.filter(f => f.topic === topic && f.status2 === 'Fait').length;
+      const subset3 = fiches.filter(f => f.topic === topic && (f.status3 || 'A faire') === 'Fait').length;
       const total = fiches.filter(f => f.topic === topic).length;
       return {
         name: topic,
         'Zone A - Ma Progression (%)': total > 0 ? Math.round((subset1 / total) * 100) : 0,
-        'Zone B - Réponses Jury (%)': total > 0 ? Math.round((subset2 / total) * 105) : 100, // mock scaled index response
+        'Zone B - Réponses Jury (%)': total > 0 ? Math.round((subset2 / total) * 100) : 0,
+        'Zone C - Commun (%)': total > 0 ? Math.round((subset3 / total) * 100) : 0,
       };
     });
   }, [fiches]);
 
   // Timeline progress simulation data over 6 stages
   const progressTimelineData = [
-    { name: 'Étape 1: Bases', 'Ma Réponse': 15, 'Retour Jury': 5 },
-    { name: 'Étape 2: Bootstrap', 'Ma Réponse': 35, 'Retour Jury': 15 },
-    { name: 'Étape 3: Bases de Données', 'Ma Réponse': 55, 'Retour Jury': 28 },
-    { name: 'Étape 4: Python Backend', 'Ma Réponse': 72, 'Retour Jury': 40 },
-    { name: 'Étape 5: Flask & Dev', 'Ma Réponse': 88, 'Retour Jury': 65 },
-    { name: 'Étape 6: Projet Final', 'Ma Réponse': stats1.pct, 'Retour Jury': stats2.pct },
+    { name: 'Étape 1: Bases', 'Ma Réponse': 15, 'Retour Jury': 5, 'Zone C': 10 },
+    { name: 'Étape 2: Bootstrap', 'Ma Réponse': 35, 'Retour Jury': 15, 'Zone C': 25 },
+    { name: 'Étape 3: Bases de Données', 'Ma Réponse': 55, 'Retour Jury': 28, 'Zone C': 42 },
+    { name: 'Étape 4: Python Backend', 'Ma Réponse': 72, 'Retour Jury': 40, 'Zone C': 58 },
+    { name: 'Étape 5: Flask & Dev', 'Ma Réponse': 88, 'Retour Jury': 65, 'Zone C': 75 },
+    { name: 'Étape 6: Projet Final', 'Ma Réponse': stats1.pct, 'Retour Jury': stats2.pct, 'Zone C (Commun)': stats3.pct },
   ];
 
   return (
@@ -355,10 +376,10 @@ export default function App() {
         )}
 
         {/* 1. OVERALL STATS BENTO BOARD */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 col-spa-3">
           
           {/* Card 1: Main Metric Selector - Zone A Progress */}
-          <ThreeDBox themeColor="blue" className="md:col-span-2 flex flex-col justify-between">
+          <ThreeDBox themeColor="blue" className="flex flex-col justify-between">
             <div className="flex items-start justify-between">
               <div>
                 <span className="text-xs uppercase tracking-wider font-bold text-blue-600 font-mono">
@@ -374,7 +395,7 @@ export default function App() {
             <div className="my-4">
               <div className="flex items-baseline gap-2">
                 <span className="text-4xl font-black text-slate-950">{stats1.pct}%</span>
-                <span className="text-xs text-slate-500">de fiches d'étude validées</span>
+                <span className="text-xs text-slate-500">de fiches validées</span>
               </div>
               {/* Progress bar */}
               <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mt-3 border border-slate-200">
@@ -421,7 +442,7 @@ export default function App() {
           </ThreeDBox>
 
           {/* Card 2: Main Metric Selector - Zone B Progress */}
-          <ThreeDBox themeColor="red" className="md:col-span-2 flex flex-col justify-between">
+          <ThreeDBox themeColor="red" className="flex flex-col justify-between">
             <div className="flex items-start justify-between">
               <div>
                 <span className="text-xs uppercase tracking-wider font-bold text-red-600 font-mono">
@@ -437,7 +458,7 @@ export default function App() {
             <div className="my-4">
               <div className="flex items-baseline gap-2">
                 <span className="text-4xl font-black text-slate-950">{stats2.pct}%</span>
-                <span className="text-xs text-slate-500">conformes aux avis jury</span>
+                <span className="text-xs text-slate-500">conformes aux avis</span>
               </div>
               {/* Progress bar */}
               <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mt-3 border border-slate-200">
@@ -452,7 +473,7 @@ export default function App() {
                     👑 Conformité jury à 100% !
                   </span>
                 ) : stats2.pct >= 75 ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-[#EA4335] bg-red-550/10 px-2.5 py-1 rounded-lg border border-red-500/20">
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-[#EA4335] bg-red-500/10 px-2.5 py-1 rounded-lg border border-red-500/20">
                     🎖️ Excellente préparation jury !
                   </span>
                 ) : stats2.pct >= 40 ? (
@@ -483,6 +504,69 @@ export default function App() {
             </div>
           </ThreeDBox>
 
+          {/* Card 3: Main Metric Selector - Zone C Progress */}
+          <ThreeDBox themeColor="green" className="flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-xs uppercase tracking-wider font-bold text-emerald-600 font-mono">
+                  Zone C • Tout le monde
+                </span>
+                <h4 className="text-xl font-black text-slate-900 mt-1">
+                  Zone Commune 🌐
+                </h4>
+              </div>
+              <BookOpen className="w-7 h-7 text-emerald-500" />
+            </div>
+
+            <div className="my-4">
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl font-black text-slate-950">{stats3.pct}%</span>
+                <span className="text-xs text-slate-500">de fiches validées</span>
+              </div>
+              {/* Progress bar */}
+              <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mt-3 border border-slate-200">
+                <div 
+                  className="bg-emerald-600 h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${stats3.pct}%` }}
+                />
+              </div>
+              <div className="mt-2.5">
+                {stats3.pct === 100 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-emerald-600 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                    👑 Perfection commune !
+                  </span>
+                ) : stats3.pct >= 75 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-emerald-700 bg-emerald-505/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                    ✨ Excellente synergie collective !
+                  </span>
+                ) : stats3.pct >= 40 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-amber-600 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                    ⚡ Progression solide !
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-black text-slate-600 bg-slate-500/10 px-2.5 py-1 rounded-lg border border-slate-500/20">
+                    📖 Prêt pour la coopération neutre !
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-xs">
+              <div>
+                <p className="text-slate-400">Neutral ✔</p>
+                <p className="text-sm font-extrabold text-[#34A853]">{stats3.fait} fiches</p>
+              </div>
+              <div>
+                <p className="text-slate-400">À faire 💤</p>
+                <p className="text-sm font-extrabold text-[#EA4335]">{stats3.faire} fiches</p>
+              </div>
+              <div>
+                <p className="text-slate-400">En cours ⏳</p>
+                <p className="text-sm font-extrabold text-[#FBBC05]">{stats3.cours} fiches</p>
+              </div>
+            </div>
+          </ThreeDBox>
+
         </div>
 
         {/* 2. DYNAMIC TREND TREND TRACKER CHARTS */}
@@ -506,6 +590,7 @@ export default function App() {
                   <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                   <Bar dataKey="Zone A - Ma Progression (%)" fill="#4285F4" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="Zone B - Réponses Jury (%)" fill="#EA4335" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Zone C - Commun (%)" fill="#10B981" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -524,8 +609,9 @@ export default function App() {
                 <LineChart data={progressTimelineData}>
                   <XAxis dataKey="name" fontSize={9} stroke="#94A3B8" />
                   <Tooltip formatter={(v) => [`${v}%`]} />
-                  <Line type="monotone" dataKey="Ma Réponse" stroke="#4285F4" strokeWidth={3} activeDot={{ r: 8 }} />
-                  <Line type="monotone" dataKey="Retour Jury" stroke="#EA4335" strokeWidth={2.5} strokeDasharray="4 4" />
+                  <Line type="monotone" dataKey="Ma Réponse" name="Vos Progrès" stroke="#4285F4" strokeWidth={3} activeDot={{ r: 8 }} />
+                  <Line type="monotone" dataKey="Retour Jury" name="Conformité Jury" stroke="#EA4335" strokeWidth={2.5} strokeDasharray="4 4" />
+                  <Line type="monotone" dataKey="Zone C (Commun)" name="Tracés Communs" stroke="#10B981" strokeWidth={2.5} strokeDasharray="2 2" />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -544,36 +630,50 @@ export default function App() {
 
         {/* 3. SWITCH HUB ZONE: ACTIVATE USER INTERFACES */}
         <div className="w-full flex justify-center mb-8">
-          <div className={`p-2 bg-slate-900 border-2 border-slate-950 rounded-full shadow-lg flex gap-2 w-full max-w-md transition-all duration-300 ring-4 hover:scale-[1.01] ${
-            activeZone === 'A' ? 'ring-blue-500/20' : 'ring-red-500/20'
+          <div className={`p-2 bg-slate-900 border-2 border-slate-950 rounded-full shadow-lg flex gap-2 w-full max-w-lg transition-all duration-300 ring-4 hover:scale-[1.01] ${
+            activeZone === 'A' ? 'ring-blue-500/20' : activeZone === 'B' ? 'ring-red-500/20' : 'ring-emerald-500/20'
           }`}>
             <button
-              onClick={() => {
-                setActiveZone('A');
-                triggerToast("Zone A activée : Ma Progression Personnelle 🎯", "info");
-              }}
-              className={`flex-1 py-2.5 px-4 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
-                activeZone === 'A'
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+               onClick={() => {
+                 setActiveZone('A');
+                 triggerToast("Zone A activée : Ma Progression Personnelle 🎯", "info");
+               }}
+               className={`flex-1 py-2.5 px-4 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
+                 activeZone === 'A'
+                   ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                   : 'text-slate-400 hover:text-slate-200'
+               }`}
             >
               <User className="w-4 h-4 shrink-0" />
               Zone A: Moi
             </button>
             <button
-              onClick={() => {
-                setActiveZone('B');
-                triggerToast("Zone B activée : Livrables pour le Jury ⚖️", "info");
-              }}
-              className={`flex-1 py-2.5 px-4 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
-                activeZone === 'B'
-                  ? 'bg-gradient-to-r from-red-600 to-pink-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+               onClick={() => {
+                 setActiveZone('B');
+                 triggerToast("Zone B activée : Livrables pour le Jury ⚖️", "info");
+               }}
+               className={`flex-1 py-2.5 px-4 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
+                 activeZone === 'B'
+                   ? 'bg-gradient-to-r from-red-600 to-pink-600 text-white shadow-md'
+                   : 'text-slate-400 hover:text-slate-200'
+               }`}
             >
               <GraduationCap className="w-4 h-4 shrink-0" />
               Zone B: Jury
+            </button>
+            <button
+               onClick={() => {
+                 setActiveZone('C');
+                 triggerToast("Zone C activée : Zone Commune Neutre 🌐", "info");
+               }}
+               className={`flex-1 py-2.5 px-4 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
+                 activeZone === 'C'
+                   ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
+                   : 'text-slate-400 hover:text-slate-200'
+               }`}
+            >
+              <BookOpen className="w-4 h-4 shrink-0" />
+              Zone C: Tous
             </button>
           </div>
         </div>
@@ -674,7 +774,7 @@ export default function App() {
         {/* 5. MAIN CHECKLIST GRID SYSTEM */}
         <div className="mb-4 flex items-center justify-between text-xs text-slate-500 max-w-7xl px-2">
           <span>{filteredFiches.length} fiches d'études correspondent aux filtres</span>
-          <span>Zone active: <strong className={activeZone === 'A' ? 'text-[#4285F4]' : 'text-[#EA4335]'}>{activeZone === 'A' ? 'Moi (Évaluation)' : 'Exigences Jury'}</strong></span>
+          <span>Zone active: <strong className={activeZone === 'A' ? 'text-[#4285F4]' : activeZone === 'B' ? 'text-[#EA4335]' : 'text-emerald-500'}>{activeZone === 'A' ? 'Moi (Évaluation)' : activeZone === 'B' ? 'Exigences Jury' : 'Zone Commune Neutre'}</strong></span>
         </div>
 
         {filteredFiches.length === 0 ? (
@@ -686,8 +786,8 @@ export default function App() {
         ) : (
           <div className="flex flex-col gap-4">
             {filteredFiches.map(fiche => {
-              const currentStatus = activeZone === 'A' ? fiche.status1 : fiche.status2;
-              const completedDate = activeZone === 'A' ? fiche.date1 : fiche.date2;
+              const currentStatus = activeZone === 'A' ? fiche.status1 : activeZone === 'B' ? fiche.status2 : (fiche.status3 || 'A faire');
+              const completedDate = activeZone === 'A' ? fiche.date1 : activeZone === 'B' ? fiche.date2 : fiche.date3;
               const isCompleted = currentStatus === 'Fait';
               const isEnCours = currentStatus === 'En cours';
 
@@ -696,12 +796,10 @@ export default function App() {
                   key={fiche.id}
                   className={`bg-white rounded-2xl border-2 shadow-sm p-4 lg:p-5 flex flex-col gap-3.5 relative overflow-hidden transition-all duration-300 ring-2 hover:scale-[1.005] hover:shadow-md ${getTopicLeftBorder(fiche.topic)} ${
                     isCompleted
-                      ? (activeZone === 'A' 
-                          ? 'border-emerald-500 bg-[#10b981]/[0.015] ring-[#34A853]/10 shadow-[0_4px_15px_-3px_rgba(16,185,129,0.15)]' 
-                          : 'border-emerald-500 bg-[#10b981]/[0.015] ring-[#34A853]/10 shadow-[0_4px_15px_-3px_rgba(16,185,129,0.15)]')
+                      ? 'border-emerald-500 bg-[#10b981]/[0.015] ring-[#34A853]/10 shadow-[0_4px_15px_-3px_rgba(16,185,129,0.15)]' 
                       : isEnCours
                         ? 'border-[#FBBC05] bg-[#FBBC05]/[0.01] ring-[#FBBC05]/10 shadow-[0_4px_12px_-3px_rgba(251,188,5,0.1)]'
-                        : (activeZone === 'A' ? 'border-blue-500/40 hover:border-blue-500 ring-slate-100/50' : 'border-red-500/40 hover:border-red-500 ring-slate-100/20')
+                        : (activeZone === 'A' ? 'border-blue-500/40 hover:border-blue-500 ring-slate-100/50' : activeZone === 'B' ? 'border-red-500/40 hover:border-red-500 ring-slate-100/20' : 'border-emerald-500/40 hover:border-emerald-500 ring-slate-100/10')
                   }`}
                 >
                   {/* Top multi-color strip for Google Brand aesthetic */}
@@ -759,7 +857,7 @@ export default function App() {
                           <p className="text-[10px] uppercase tracking-wider font-extrabold text-indigo-750 flex items-center gap-1 border-b border-indigo-150 pb-1 mb-1.5">
                             🎯 Lien avec Devoir M-Motors
                           </p>
-                          <p className="text-xs text-slate-650 italic leading-relaxed font-mono flex-1">
+                          <p className="text-xs text-slate-650 italic leading-relaxed font-mono flex-1 text-balance overflow-x-auto">
                             {fiche.motorsLink}
                           </p>
                         </div>
@@ -769,7 +867,7 @@ export default function App() {
                       <div className="pt-3 border-t border-slate-100">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 gap-2">
                           <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                            🟢 Statut de validation ({activeZone === 'A' ? 'Zone A - Vous' : 'Zone B - Jury'}):
+                            🟢 Statut de validation ({activeZone === 'A' ? 'Zone A - Vous' : activeZone === 'B' ? 'Zone B - Jury' : 'Zone C - Commun'}):
                           </span>
                           {completedDate && (
                             <span className="text-[9px] text-emerald-750 font-black flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full shadow-sm">
@@ -783,7 +881,7 @@ export default function App() {
                             const isActive = currentStatus === status;
                             const getStatusStyle = () => {
                               if (!isActive) return 'text-slate-650 hover:bg-white/60';
-                              if (status === 'Fait') return activeZone === 'A' ? 'bg-[#34A853] text-white font-black shadow-md scale-[1.02]' : 'bg-[#34A853] text-white font-black shadow-md scale-[1.02]';
+                              if (status === 'Fait') return 'bg-[#34A853] text-white font-black shadow-md scale-[1.02]';
                               if (status === 'En cours') return 'bg-[#FBBC05] text-[#1e293b] font-black shadow-md scale-[1.02]';
                               return 'bg-slate-400 text-white font-black shadow-md scale-[1.02]';
                             };
@@ -882,10 +980,10 @@ export default function App() {
 
                         {/* Display ONLY activeZone resource block */}
                         <div>
-                          {activeZone === 'A' ? (
+                          {activeZone === 'A' && (
                             /* Zone A Resource block */
                             (fiche.audio1 || fiche.slide1 || fiche.video1 || fiche.image1 || fiche.nblm1) && (
-                              <div className="bg-blue-50/10 border border-blue-100/40 rounded-xl p-2">
+                              <div className="bg-blue-50/10 border border-blue-100/40 rounded-xl p-2 animate-fadeIn">
                                 <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1.5 flex items-center justify-between">
                                   <span>Zone A • Évaluations (Moi)</span>
                                   <span className="bg-blue-100 text-blue-700 px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-tight">Zone A</span>
@@ -949,10 +1047,12 @@ export default function App() {
                                 </div>
                               </div>
                             )
-                          ) : (
+                          )}
+
+                          {activeZone === 'B' && (
                             /* Zone B Resource block */
                             (fiche.audio2 || fiche.slide2 || fiche.video2 || fiche.image2 || fiche.nblm2) && (
-                              <div className="bg-red-50/10 border border-red-100/40 rounded-xl p-2">
+                              <div className="bg-red-50/10 border border-red-100/40 rounded-xl p-2 animate-fadeIn">
                                 <p className="text-[9px] font-black text-red-600 uppercase tracking-widest mb-1.5 flex items-center justify-between">
                                   <span>Zone B • Retour Jury</span>
                                   <span className="bg-red-100 text-red-700 px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-tight">Zone B</span>
@@ -1010,6 +1110,75 @@ export default function App() {
                                       url={fiche.nblm2} 
                                       type="nblm" 
                                       zone="B" 
+                                      onPreviewInApp={setSelectedResourceForPreview}
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          )}
+
+                          {activeZone === 'C' && (
+                            /* Zone C Resource block */
+                            (fiche.audio3 || fiche.slide3 || fiche.video3 || fiche.image3 || fiche.nblm3) && (
+                              <div className="bg-emerald-50/10 border border-emerald-100/40 rounded-xl p-2 animate-fadeIn">
+                                <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                                  <span>Zone C • Tracés Communs</span>
+                                  <span className="bg-emerald-100 text-emerald-700 px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-tight">Zone C</span>
+                                </p>
+                                <div className="space-y-1">
+                                  {fiche.audio3 && (
+                                    <ResourcePlayer 
+                                      ficheId={fiche.id} 
+                                      ficheTitle={fiche.title} 
+                                      resourceName="Vocal Commun (.m4a)" 
+                                      url={fiche.audio3} 
+                                      type="audio" 
+                                      zone="C" 
+                                      onPreviewInApp={setSelectedResourceForPreview}
+                                    />
+                                  )}
+                                  {fiche.slide3 && (
+                                    <ResourcePlayer 
+                                      ficheId={fiche.id} 
+                                      ficheTitle={fiche.title} 
+                                      resourceName="Slides Base Commune" 
+                                      url={fiche.slide3} 
+                                      type="slide" 
+                                      zone="C" 
+                                      onPreviewInApp={setSelectedResourceForPreview}
+                                    />
+                                  )}
+                                  {fiche.video3 && (
+                                    <ResourcePlayer 
+                                      ficheId={fiche.id} 
+                                      ficheTitle={fiche.title} 
+                                      resourceName="Vidéo Explicative Commune" 
+                                      url={fiche.video3} 
+                                      type="video" 
+                                      zone="C" 
+                                      onPreviewInApp={setSelectedResourceForPreview}
+                                    />
+                                  )}
+                                  {fiche.image3 && (
+                                    <ResourcePlayer 
+                                      ficheId={fiche.id} 
+                                      ficheTitle={fiche.title} 
+                                      resourceName="Iconographies Communes" 
+                                      url={fiche.image3} 
+                                      type="image" 
+                                      zone="C" 
+                                      onPreviewInApp={setSelectedResourceForPreview}
+                                    />
+                                  )}
+                                  {fiche.nblm3 && (
+                                    <ResourcePlayer 
+                                      ficheId={fiche.id} 
+                                      ficheTitle={fiche.title} 
+                                      resourceName="NotebookLM Références Communes" 
+                                      url={fiche.nblm3} 
+                                      type="nblm" 
+                                      zone="C" 
                                       onPreviewInApp={setSelectedResourceForPreview}
                                     />
                                   )}
