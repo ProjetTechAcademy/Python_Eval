@@ -8,289 +8,295 @@ interface CsvLoaderProps {
   currentCount: number;
 }
 
+// Get base public URL
+export const getBasePubUrl = (url: string) => {
+  const match = url.match(/^(https:\/\/docs\.google\.com\/spreadsheets\/d\/e\/[a-zA-Z0-9_-]+\/pub)/);
+  return match ? match[1] : null;
+};
+
+// Parse a single CSV sheet of rows into a worksheet object
+export const parseSingleTextToSheet = (text: string) => {
+  if (!text || text.trim().length === 0) {
+    throw new Error('Le CSV est vide ou invalide.');
+  }
+
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let insideQuote = false;
+  let currentVal = '';
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (char === '"') {
+      if (insideQuote && nextChar === '"') {
+        currentVal += '"';
+        i++; // Skip next quote
+      } else {
+        insideQuote = !insideQuote;
+      }
+    } else if (char === ',' && !insideQuote) {
+      currentRow.push(currentVal.trim());
+      currentVal = '';
+    } else if ((char === '\r' || char === '\n') && !insideQuote) {
+      if (char === '\r' && nextChar === '\n') {
+        i++;
+      }
+      currentRow.push(currentVal.trim());
+      rows.push(currentRow);
+      currentRow = [];
+      currentVal = '';
+    } else {
+      currentVal += char;
+    }
+  }
+  if (currentVal || currentRow.length > 0) {
+    currentRow.push(currentVal.trim());
+    rows.push(currentRow);
+  }
+
+  if (rows.length < 3) {
+    throw new Error('Format invalide. Trop peu de lignes.');
+  }
+
+  // Detect section
+  let section: 'eval0' | 'eval1' | 'eval2' = 'eval0';
+  for (let i = 0; i < Math.min(10, rows.length); i++) {
+    const lineJoined = rows[i].join(',');
+    if (lineJoined.includes('Python_Eval_1') || lineJoined.includes('audio_1') || lineJoined.includes('Audio_1')) {
+      section = 'eval1';
+      break;
+    } else if (lineJoined.includes('Python_Eval_2') || lineJoined.includes('audio_2') || lineJoined.includes('Audio_2')) {
+      section = 'eval2';
+      break;
+    } else if (lineJoined.includes('Python_Eval_0') || lineJoined.includes('audio_0') || lineJoined.includes('Audio_0')) {
+      section = 'eval0';
+      break;
+    }
+  }
+
+  // Find headers row starting with N° or N
+  let headers: string[] = [];
+  let headersIndex = -1;
+  for (let i = 0; i < Math.min(15, rows.length); i++) {
+    const row = rows[i];
+    if (row.length === 0 || !row[0]) continue;
+    const firstCell = row[0].trim();
+    if (firstCell === 'N°' || firstCell === 'N') {
+      headers = row.map(h => h.trim().toLowerCase());
+      headersIndex = i;
+      break;
+    }
+  }
+
+  if (headers.length === 0) {
+    headers = ['n°', 'titre', 'action', 'devoir', 'date', 'fait', 'cours', 'audio', 'slide', 'video', 'image', 'nblm'];
+  }
+
+  // Double check section using exact columns names
+  headers.forEach(h => {
+    if (h.includes('_1') || h.includes('audio_1') || h.includes('slide_1')) section = 'eval1';
+    if (h.includes('_2') || h.includes('audio_2') || h.includes('slide_2')) section = 'eval2';
+    if (h.includes('_0') || h.includes('audio_0') || h.includes('slide_0')) section = 'eval0';
+  });
+
+  const records: Record<number, any> = {};
+
+  for (let i = headersIndex + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (row.length === 0 || !row[0]) continue;
+
+    const firstCell = row[0].trim();
+    const idNum = parseInt(firstCell, 10);
+    if (isNaN(idNum)) continue;
+
+    const record: any = {
+      id: idNum,
+      title: '',
+      action: '',
+      motorsLink: '',
+      date: '',
+      status: 'A faire',
+      coursFileUrl: '',
+      audio: '',
+      slide: '',
+      video: '',
+      image: '',
+      nblm: '',
+      studi: '',
+      suivi: ''
+    };
+
+    headers.forEach((header, index) => {
+      if (index >= row.length) return;
+      const val = row[index].trim();
+      if (!val) return;
+
+      if (header.includes('titre')) {
+        record.title = val;
+      } else if (header.includes('action')) {
+        record.action = val;
+      } else if (header.includes('devoir') || header.includes('motors') || header.includes('lien direct')) {
+        record.motorsLink = val;
+      } else if (header.includes('date')) {
+        record.date = val;
+      } else if (header.includes('fait') || header.includes('fait ?')) {
+        record.status = (val.toLowerCase().includes('en cours') ? 'En cours' : val.toLowerCase().includes('fait') ? 'Fait' : 'A faire');
+      } else if (header.includes('cours')) {
+        if (val.startsWith('http')) {
+          record.coursFileUrl = val;
+        } else {
+          record.coursFile = val;
+        }
+      } else if (header.includes('audio')) {
+        record.audio = val;
+      } else if (header.includes('slide')) {
+        record.slide = val;
+      } else if (header.includes('vidéo') || header.includes('video')) {
+        record.video = val;
+      } else if (header.includes('image')) {
+        record.image = val;
+      } else if (header.includes('nblm')) {
+        record.nblm = val;
+      } else if (header.includes('studi')) {
+        record.studi = val;
+      } else if (header.includes('suivi')) {
+        record.suivi = val;
+      } else if (header.includes('lien') && !record.coursFileUrl && val.startsWith('http')) {
+        record.coursFileUrl = val;
+      }
+    });
+
+    records[idNum] = record;
+  }
+
+  return { section, records };
+};
+
+export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; records: Record<number, any> }[], currentList: Fiche[]): Fiche[] => {
+  const mergedMap: Record<number, Partial<Fiche>> = {};
+
+  sheets.forEach(sheet => {
+    const section = sheet.section;
+    Object.entries(sheet.records).forEach(([idStr, rec]) => {
+      const id = parseInt(idStr, 10);
+      if (isNaN(id)) return;
+
+      if (!mergedMap[id]) {
+        mergedMap[id] = { id };
+      }
+
+      const m = mergedMap[id];
+
+      if (rec.title) m.title = rec.title;
+      if (rec.action) m.action = rec.action;
+      if (rec.motorsLink) m.motorsLink = rec.motorsLink;
+      if (rec.studi) m.studi = rec.studi;
+
+      // Infer topic
+      if (rec.title) {
+        const val = rec.title;
+        if (val.includes('_M03_')) {
+          if (val.includes('_S018_') || val.includes('_S019_') || val.includes('_S020_') || val.includes('_S021_')) {
+            m.topic = 'Bootstrap';
+          } else {
+            m.topic = 'HTML & CSS';
+          }
+        } else if (val.includes('_M06_') || val.includes('_M09_')) {
+          m.topic = 'Bases de Données';
+        } else if (val.includes('_M08_')) {
+          if (val.includes('_S010_') || val.includes('_S021_') || val.includes('_S024_') || val.includes('_S025_') || val.includes('_S026_')) {
+            m.topic = 'Python Quality & Flask';
+          } else {
+            m.topic = 'Python Backend';
+          }
+        } else if (val.includes('_M10_') || val.includes('_M12_') || val.includes('_M13_')) {
+          m.topic = 'APIs, Git & Sécurité';
+        } else {
+          m.topic = 'Autre';
+        }
+      }
+
+      if (rec.coursFileUrl && rec.coursFileUrl.startsWith('http')) {
+        m.coursFileUrl = rec.coursFileUrl;
+      }
+
+      if (section === 'eval1') {
+        m.status1 = rec.status;
+        if (rec.date) m.date1 = rec.date;
+        if (rec.audio) m.audio1 = rec.audio;
+        if (rec.slide) m.slide1 = rec.slide;
+        if (rec.video) m.video1 = rec.video;
+        if (rec.image) m.image1 = rec.image;
+        if (rec.nblm) m.nblm1 = rec.nblm;
+        if (rec.suivi) m.suivi1 = rec.suivi;
+      } else if (section === 'eval2') {
+        m.status2 = rec.status;
+        if (rec.date) m.date2 = rec.date;
+        if (rec.audio) m.audio2 = rec.audio;
+        if (rec.slide) m.slide2 = rec.slide;
+        if (rec.video) m.video2 = rec.video;
+        if (rec.image) m.image2 = rec.image;
+        if (rec.nblm) m.nblm2 = rec.nblm;
+        if (rec.suivi) m.suivi2 = rec.suivi;
+      } else if (section === 'eval0') {
+        m.status3 = rec.status;
+        if (rec.date) m.date3 = rec.date;
+        if (rec.audio) m.audio3 = rec.audio;
+        if (rec.slide) m.slide3 = rec.slide;
+        if (rec.video) m.video3 = rec.video;
+        if (rec.image) m.image3 = rec.image;
+        if (rec.nblm) m.nblm3 = rec.nblm;
+        if (rec.suivi) m.suivi3 = rec.suivi;
+      }
+    });
+  });
+
+  const mergedList = currentList.map(orig => {
+    const update = mergedMap[orig.id];
+    if (update) {
+      return {
+        ...orig,
+        ...update,
+        coursFileUrl: update.coursFileUrl || orig.coursFileUrl || '',
+        status1: update.status1 || orig.status1,
+        status2: update.status2 || orig.status2,
+        status3: update.status3 || orig.status3 || 'A faire',
+      } as Fiche;
+    }
+    return orig;
+  });
+
+  Object.keys(mergedMap).forEach(idStr => {
+    const id = parseInt(idStr, 10);
+    if (!mergedList.some(f => f.id === id)) {
+      const up = mergedMap[id];
+      mergedList.push({
+        id,
+        title: up.title || `Fiche #${id}`,
+        topic: up.topic || 'Autre',
+        action: up.action || '',
+        motorsLink: up.motorsLink || '',
+        status1: up.status1 || 'A faire',
+        status2: up.status2 || 'A faire',
+        status3: up.status3 || 'A faire',
+        coursFile: `${id}_cours.pdf`,
+        coursFileUrl: up.coursFileUrl || '',
+        ...up
+      } as Fiche);
+    }
+  });
+
+  return mergedList.sort((a, b) => a.id - b.id);
+};
+
 export default function CsvLoader({ onDataLoaded, currentCount }: CsvLoaderProps) {
   const [csvUrl, setCsvUrl] = useState('https://docs.google.com/spreadsheets/d/e/2PACX-1vS9upnowMIAhXQO5l7H-m9dfBtytEEugAA_ChZthJRiKILpUNJgrCSHHvQXRt_0QNF-2Sb8ie7gfi0L/pub?output=csv');
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [rawText, setRawText] = useState('');
   const [showPasteArea, setShowPasteArea] = useState(false);
-
-  // Parse a single CSV sheet of rows into a worksheet object
-  const parseSingleTextToSheet = (text: string) => {
-    if (!text || text.trim().length === 0) {
-      throw new Error('Le CSV est vide ou invalide.');
-    }
-
-    const rows: string[][] = [];
-    let currentRow: string[] = [];
-    let insideQuote = false;
-    let currentVal = '';
-
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      const nextChar = text[i + 1];
-
-      if (char === '"') {
-        if (insideQuote && nextChar === '"') {
-          currentVal += '"';
-          i++; // Skip next quote
-        } else {
-          insideQuote = !insideQuote;
-        }
-      } else if (char === ',' && !insideQuote) {
-        currentRow.push(currentVal.trim());
-        currentVal = '';
-      } else if ((char === '\r' || char === '\n') && !insideQuote) {
-        if (char === '\r' && nextChar === '\n') {
-          i++;
-        }
-        currentRow.push(currentVal.trim());
-        rows.push(currentRow);
-        currentRow = [];
-        currentVal = '';
-      } else {
-        currentVal += char;
-      }
-    }
-    if (currentVal || currentRow.length > 0) {
-      currentRow.push(currentVal.trim());
-      rows.push(currentRow);
-    }
-
-    if (rows.length < 3) {
-      throw new Error('Format invalide. Trop peu de lignes.');
-    }
-
-    // Detect section
-    let section: 'eval0' | 'eval1' | 'eval2' = 'eval0';
-    for (let i = 0; i < Math.min(10, rows.length); i++) {
-      const lineJoined = rows[i].join(',');
-      if (lineJoined.includes('Python_Eval_1') || lineJoined.includes('audio_1') || lineJoined.includes('Audio_1')) {
-        section = 'eval1';
-        break;
-      } else if (lineJoined.includes('Python_Eval_2') || lineJoined.includes('audio_2') || lineJoined.includes('Audio_2')) {
-        section = 'eval2';
-        break;
-      } else if (lineJoined.includes('Python_Eval_0') || lineJoined.includes('audio_0') || lineJoined.includes('Audio_0')) {
-        section = 'eval0';
-        break;
-      }
-    }
-
-    // Find headers row starting with N° or N
-    let headers: string[] = [];
-    let headersIndex = -1;
-    for (let i = 0; i < Math.min(15, rows.length); i++) {
-      const row = rows[i];
-      if (row.length === 0 || !row[0]) continue;
-      const firstCell = row[0].trim();
-      if (firstCell === 'N°' || firstCell === 'N') {
-        headers = row.map(h => h.trim().toLowerCase());
-        headersIndex = i;
-        break;
-      }
-    }
-
-    if (headers.length === 0) {
-      headers = ['n°', 'titre', 'action', 'devoir', 'date', 'fait', 'cours', 'audio', 'slide', 'video', 'image', 'nblm'];
-    }
-
-    // Double check section using exact columns names
-    headers.forEach(h => {
-      if (h.includes('_1') || h.includes('audio_1') || h.includes('slide_1')) section = 'eval1';
-      if (h.includes('_2') || h.includes('audio_2') || h.includes('slide_2')) section = 'eval2';
-      if (h.includes('_0') || h.includes('audio_0') || h.includes('slide_0')) section = 'eval0';
-    });
-
-    const records: Record<number, any> = {};
-
-    for (let i = headersIndex + 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (row.length === 0 || !row[0]) continue;
-
-      const firstCell = row[0].trim();
-      const idNum = parseInt(firstCell, 10);
-      if (isNaN(idNum)) continue;
-
-      const record: any = {
-        id: idNum,
-        title: '',
-        action: '',
-        motorsLink: '',
-        date: '',
-        status: 'A faire',
-        coursFileUrl: '',
-        audio: '',
-        slide: '',
-        video: '',
-        image: '',
-        nblm: '',
-        studi: '',
-        suivi: ''
-      };
-
-      headers.forEach((header, index) => {
-        if (index >= row.length) return;
-        const val = row[index].trim();
-        if (!val) return;
-
-        if (header.includes('titre')) {
-          record.title = val;
-        } else if (header.includes('action')) {
-          record.action = val;
-        } else if (header.includes('devoir') || header.includes('motors') || header.includes('lien direct')) {
-          record.motorsLink = val;
-        } else if (header.includes('date')) {
-          record.date = val;
-        } else if (header.includes('fait') || header.includes('fait ?')) {
-          record.status = (val.toLowerCase().includes('en cours') ? 'En cours' : val.toLowerCase().includes('fait') ? 'Fait' : 'A faire');
-        } else if (header.includes('cours')) {
-          if (val.startsWith('http')) {
-            record.coursFileUrl = val;
-          } else {
-            record.coursFile = val;
-          }
-        } else if (header.includes('audio')) {
-          record.audio = val;
-        } else if (header.includes('slide')) {
-          record.slide = val;
-        } else if (header.includes('vidéo') || header.includes('video')) {
-          record.video = val;
-        } else if (header.includes('image')) {
-          record.image = val;
-        } else if (header.includes('nblm')) {
-          record.nblm = val;
-        } else if (header.includes('studi')) {
-          record.studi = val;
-        } else if (header.includes('suivi')) {
-          record.suivi = val;
-        } else if (header.includes('lien') && !record.coursFileUrl && val.startsWith('http')) {
-          record.coursFileUrl = val;
-        }
-      });
-
-      records[idNum] = record;
-    }
-
-    return { section, records };
-  };
-
-  const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; records: Record<number, any> }[], currentList: Fiche[]): Fiche[] => {
-    const mergedMap: Record<number, Partial<Fiche>> = {};
-
-    sheets.forEach(sheet => {
-      const section = sheet.section;
-      Object.entries(sheet.records).forEach(([idStr, rec]) => {
-        const id = parseInt(idStr, 10);
-        if (isNaN(id)) return;
-
-        if (!mergedMap[id]) {
-          mergedMap[id] = { id };
-        }
-
-        const m = mergedMap[id];
-
-        if (rec.title) m.title = rec.title;
-        if (rec.action) m.action = rec.action;
-        if (rec.motorsLink) m.motorsLink = rec.motorsLink;
-        if (rec.studi) m.studi = rec.studi;
-
-        // Infer topic
-        if (rec.title) {
-          const val = rec.title;
-          if (val.includes('_M03_')) {
-            if (val.includes('_S018_') || val.includes('_S019_') || val.includes('_S020_') || val.includes('_S021_')) {
-              m.topic = 'Bootstrap';
-            } else {
-              m.topic = 'HTML & CSS';
-            }
-          } else if (val.includes('_M06_') || val.includes('_M09_')) {
-            m.topic = 'Bases de Données';
-          } else if (val.includes('_M08_')) {
-            if (val.includes('_S010_') || val.includes('_S021_') || val.includes('_S024_') || val.includes('_S025_') || val.includes('_S026_')) {
-              m.topic = 'Python Quality & Flask';
-            } else {
-              m.topic = 'Python Backend';
-            }
-          } else if (val.includes('_M10_') || val.includes('_M12_') || val.includes('_M13_')) {
-            m.topic = 'APIs, Git & Sécurité';
-          } else {
-            m.topic = 'Autre';
-          }
-        }
-
-        if (rec.coursFileUrl && rec.coursFileUrl.startsWith('http')) {
-          m.coursFileUrl = rec.coursFileUrl;
-        }
-
-        if (section === 'eval1') {
-          m.status1 = rec.status;
-          if (rec.date) m.date1 = rec.date;
-          if (rec.audio) m.audio1 = rec.audio;
-          if (rec.slide) m.slide1 = rec.slide;
-          if (rec.video) m.video1 = rec.video;
-          if (rec.image) m.image1 = rec.image;
-          if (rec.nblm) m.nblm1 = rec.nblm;
-          if (rec.suivi) m.suivi1 = rec.suivi;
-        } else if (section === 'eval2') {
-          m.status2 = rec.status;
-          if (rec.date) m.date2 = rec.date;
-          if (rec.audio) m.audio2 = rec.audio;
-          if (rec.slide) m.slide2 = rec.slide;
-          if (rec.video) m.video2 = rec.video;
-          if (rec.image) m.image2 = rec.image;
-          if (rec.nblm) m.nblm2 = rec.nblm;
-          if (rec.suivi) m.suivi2 = rec.suivi;
-        } else if (section === 'eval0') {
-          m.status3 = rec.status;
-          if (rec.date) m.date3 = rec.date;
-          if (rec.audio) m.audio3 = rec.audio;
-          if (rec.slide) m.slide3 = rec.slide;
-          if (rec.video) m.video3 = rec.video;
-          if (rec.image) m.image3 = rec.image;
-          if (rec.nblm) m.nblm3 = rec.nblm;
-          if (rec.suivi) m.suivi3 = rec.suivi;
-        }
-      });
-    });
-
-    const mergedList = currentList.map(orig => {
-      const update = mergedMap[orig.id];
-      if (update) {
-        return {
-          ...orig,
-          ...update,
-          coursFileUrl: update.coursFileUrl || orig.coursFileUrl || '',
-          status1: update.status1 || orig.status1,
-          status2: update.status2 || orig.status2,
-          status3: update.status3 || orig.status3 || 'A faire',
-        } as Fiche;
-      }
-      return orig;
-    });
-
-    Object.keys(mergedMap).forEach(idStr => {
-      const id = parseInt(idStr, 10);
-      if (!mergedList.some(f => f.id === id)) {
-        const up = mergedMap[id];
-        mergedList.push({
-          id,
-          title: up.title || `Fiche #${id}`,
-          topic: up.topic || 'Autre',
-          action: up.action || '',
-          motorsLink: up.motorsLink || '',
-          status1: up.status1 || 'A faire',
-          status2: up.status2 || 'A faire',
-          status3: up.status3 || 'A faire',
-          coursFile: `${id}_cours.pdf`,
-          coursFileUrl: up.coursFileUrl || '',
-          ...up
-        } as Fiche);
-      }
-    });
-
-    return mergedList.sort((a, b) => a.id - b.id);
-  };
 
   const parseCsvContent = (text: string) => {
     try {
@@ -313,12 +319,6 @@ export default function CsvLoader({ onDataLoaded, currentCount }: CsvLoaderProps
     }
   };
 
-  // Get base public URL
-  const getBasePubUrl = (url: string) => {
-    const match = url.match(/^(https:\/\/docs\.google\.com\/spreadsheets\/d\/e\/[a-zA-Z0-9_-]+\/pub)/);
-    return match ? match[1] : null;
-  };
-
   // 1. Dynamic fetch from the server/browser
   const fetchCsvData = async () => {
     setIsLoading(true);
@@ -330,7 +330,7 @@ export default function CsvLoader({ onDataLoaded, currentCount }: CsvLoaderProps
         setStatusMessage({ type: 'info', text: 'Récupération simultanée des Zones A, B et C...' });
         
         const fetchText = async (urlStr: string) => {
-          const res = await fetch(urlStr);
+          const res = await fetch(urlStr + (urlStr.includes('?') ? '&' : '?') + 't=' + Date.now());
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           return res.text();
         };
@@ -353,7 +353,7 @@ export default function CsvLoader({ onDataLoaded, currentCount }: CsvLoaderProps
         });
         setRawText(textA);
       } else {
-        const response = await fetch(csvUrl);
+        const response = await fetch(csvUrl + (csvUrl.includes('?') ? '&' : '?') + 't=' + Date.now());
         if (!response.ok) {
           throw new Error(`Le serveur a renvoyé une erreur HTTP ${response.status}`);
         }

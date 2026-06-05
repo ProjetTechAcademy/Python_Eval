@@ -3,7 +3,7 @@ import { initialFiches } from './data/initialData';
 import { Fiche, FicheStatus } from './types';
 import ThreeDBox from './components/ThreeDBox';
 import ResourcePlayer from './components/ResourcePlayer';
-import CsvLoader from './components/CsvLoader';
+import CsvLoader, { getBasePubUrl, parseSingleTextToSheet, mergeSheets } from './components/CsvLoader';
 import SpeechReaderModal from './components/SpeechReaderModal';
 import {
   BarChart,
@@ -190,6 +190,48 @@ export default function App() {
   // New features for Blocks and Modules isolation & navigation
   const [selectedBlock, setSelectedBlock] = useState<string>('All');
   const [selectedModule, setSelectedModule] = useState<string>('All');
+
+  // Background Auto-sync on mount
+  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
+
+  useEffect(() => {
+    const autoSyncSpreadsheet = async () => {
+      setIsAutoSyncing(true);
+      try {
+        const spreadsheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS9upnowMIAhXQO5l7H-m9dfBtytEEugAA_ChZthJRiKILpUNJgrCSHHvQXRt_0QNF-2Sb8ie7gfi0L/pub?output=csv';
+        const base = getBasePubUrl(spreadsheetUrl);
+        if (!base) return;
+
+        const fetchText = async (urlStr: string) => {
+          const res = await fetch(urlStr + (urlStr.includes('?') ? '&' : '?') + 't=' + Date.now());
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.text();
+        };
+
+        const [textC, textA, textB] = await Promise.all([
+          fetchText(`${base}?output=csv&gid=1056100740`),
+          fetchText(`${base}?output=csv&gid=0`),
+          fetchText(`${base}?output=csv&gid=531214884`)
+        ]);
+
+        const sheetC = parseSingleTextToSheet(textC);
+        const sheetA = parseSingleTextToSheet(textA);
+        const sheetB = parseSingleTextToSheet(textB);
+
+        const merged = mergeSheets([sheetC, sheetA, sheetB], initialFiches);
+        setFiches(merged);
+        localStorage.setItem('m-motors-fiches', JSON.stringify(merged));
+        triggerToast("🚀 Synchro auto : Toutes vos fiches à jour en direct depuis Google Sheets !", "success");
+      } catch (error) {
+        console.warn("Background auto-sync failed, running off cached offline fiches", error);
+      } finally {
+        setIsAutoSyncing(false);
+      }
+    };
+
+    autoSyncSpreadsheet();
+  }, []);
+
   const [viewMode, setViewMode] = useState<'continue' | 'segmented'>(() => {
     const localMode = localStorage.getItem('m-motors-view-mode');
     return (localMode as 'continue' | 'segmented') || 'segmented'; // Default to organized segmented view for easy navigation
@@ -327,26 +369,51 @@ export default function App() {
   // Domain Category listing
   const topics = ['All', 'HTML & CSS', 'Bootstrap', 'Bases de Données', 'Python Backend', 'Python Quality & Flask', 'APIs, Git & Sécurité'];
 
-  // Dynamically extract all available Blocks & Modules from fiches
-  const { blocksList, modulesList } = useMemo(() => {
+  // Fiches that are filtered ONLY by block and module (not topic, search or status)
+  const fichesFilteredOnlyByBlockAndModule = useMemo(() => {
+    return fiches.filter(f => {
+      const title = f.title || '';
+      const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
+      const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
+      const blockCode = bMatch ? `B${bMatch[1]}` : 'Autre';
+      const moduleCode = mMatch ? `M${mMatch[1]}` : 'Autre';
+
+      const matchesBlock = selectedBlock === 'All' || blockCode === selectedBlock;
+      const matchesModule = selectedModule === 'All' || moduleCode === selectedModule;
+
+      return matchesBlock && matchesModule;
+    });
+  }, [fiches, selectedBlock, selectedModule]);
+
+  // Dynamically extract all available Blocks & Modules from fiches, contextualized by selected block
+  const { blocksList, modulesList, availableTopics } = useMemo(() => {
     const blocks = new Set<string>();
     const modules = new Set<string>();
+    const topicsSet = new Set<string>();
 
     fiches.forEach(f => {
       const title = f.title || '';
       const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
       const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
-      if (bMatch) blocks.add(`B${bMatch[1]}`);
-      if (mMatch) modules.add(`M${mMatch[1]}`);
+      
+      const bCode = bMatch ? `B${bMatch[1]}` : 'Autre';
+      const mCode = mMatch ? `M${mMatch[1]}` : 'Autre';
+
+      blocks.add(bCode);
+
+      if (selectedBlock === 'All' || bCode === selectedBlock) {
+        if (mMatch) modules.add(mCode);
+        if (f.topic) topicsSet.add(f.topic);
+      }
     });
 
-    const sortedBlocks = Array.from(blocks).sort((a, b) => {
+    const sortedBlocks = Array.from(blocks).filter(b => b !== 'Autre').sort((a, b) => {
       const numA = parseInt(a.slice(1), 10);
       const numB = parseInt(b.slice(1), 10);
       return numA - numB;
     });
 
-    const sortedModules = Array.from(modules).sort((a, b) => {
+    const sortedModules = Array.from(modules).filter(m => m !== 'Autre').sort((a, b) => {
       const numA = parseInt(a.slice(1), 10);
       const numB = parseInt(b.slice(1), 10);
       return numA - numB;
@@ -354,9 +421,19 @@ export default function App() {
 
     return {
       blocksList: ['All', ...sortedBlocks],
-      modulesList: ['All', ...sortedModules]
+      modulesList: ['All', ...sortedModules],
+      availableTopics: ['All', ...Array.from(topicsSet)]
     };
-  }, [fiches]);
+  }, [fiches, selectedBlock]);
+
+  // Handle auto-resetting module filter if it doesn't exist in newly filtered modules list
+  useEffect(() => {
+    if (selectedBlock !== 'All' && selectedModule !== 'All') {
+      if (!modulesList.includes(selectedModule)) {
+        setSelectedModule('All');
+      }
+    }
+  }, [selectedBlock, modulesList, selectedModule]);
 
   // Sub-filter core
   const filteredFiches = useMemo(() => {
@@ -1587,8 +1664,8 @@ export default function App() {
           <div className="w-full overflow-x-auto no-scrollbar py-1">
             <div className="flex items-center gap-2 min-w-max">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1"><Filter className="w-3 h-3 text-indigo-500" /> Thème :</span>
-              {topics.map(t => {
-                const count = t === 'All' ? fiches.length : fiches.filter(f => f.topic === t).length;
+              {topics.filter(t => t === 'All' || availableTopics.includes(t)).map(t => {
+                const count = t === 'All' ? fichesFilteredOnlyByBlockAndModule.length : fichesFilteredOnlyByBlockAndModule.filter(f => f.topic === t).length;
                 const isSelected = selectedTopic === t;
                 
                 const getAccentClass = () => {
