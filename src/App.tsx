@@ -1568,16 +1568,16 @@ export default function App() {
               <button
                 onClick={() => {
                   setViewMode('segmented');
-                  triggerToast("🗂️ Navigation par séquences (Blocs/Modules) activée", "info");
+                  triggerToast("🗂️ Navigation par Blocs & Modules activée", "info");
                 }}
                 className={`flex-1 md:flex-none py-1.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   viewMode === 'segmented'
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-201/60'
                 }`}
               >
                 <Grid className="w-3.5 h-3.5" />
-                Séquences (Blocs/Modules)
+                Par Blocs & Modules
               </button>
             </div>
             
@@ -1713,7 +1713,7 @@ export default function App() {
         {/* 5. MAIN CHECKLIST GRID SYSTEM */}
         <div className="mb-4 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 max-w-7xl px-2 gap-2">
           <span>{filteredFiches.length} fiches d'études correspondent aux filtres</span>
-          <span>Séquencement: <strong className="text-slate-800 font-extrabold uppercase">{viewMode === 'continue' ? 'Liste Continue 📋' : 'Par Séquences Blocs & Modules 🗂️'}</strong></span>
+          <span>Affichage: <strong className="text-slate-800 font-extrabold uppercase">{viewMode === 'continue' ? 'Liste Continue 📋' : 'Par Blocs & Modules 🗂️'}</strong></span>
           <span>Zone active: <strong className={activeZone === 'A' ? 'text-[#4285F4]' : activeZone === 'B' ? 'text-[#EA4335]' : 'text-emerald-500 font-bold'}>{activeZone === 'A' ? 'Moi (Évaluation)' : activeZone === 'B' ? 'Exigences Jury' : 'Zone Commune Neutre'}</strong></span>
         </div>
 
@@ -1750,7 +1750,7 @@ export default function App() {
                       </div>
                       <div>
                         <h4 className="font-extrabold text-slate-900 text-sm sm:text-base flex items-center gap-2">
-                          {group.blockCode === 'Autre' ? 'Cours hors Séquences d\'Études' : `Séquence ${group.blockCode.replace('B', '')}`}
+                          {group.blockCode === 'Autre' ? 'Cours hors Blocs d\'Études' : `Bloc ${group.blockCode.replace('B', '')}`}
                           <span className="text-xs font-bold text-slate-400 font-mono">({group.blockCode})</span>
                         </h4>
                         <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
@@ -1798,7 +1798,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="text-center py-1 bg-white/50 rounded-xl text-slate-400 text-xs italic">
-                      Séquence masquée &bull; Déroulez pour afficher les {totalCountInBlock} cours associés
+                      Bloc masqué &bull; Déroulez pour afficher les {totalCountInBlock} cours associés
                     </div>
                   )}
                 </div>
