@@ -270,12 +270,12 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
   ])).filter(id => !isNaN(id));
 
   const resultList = finalIds.map(id => {
-    const up = mergedMap[id];
+    const up = mergedMap[id] || {};
     
     // Default fallback zone memberships for common files of Bloc 3
     const belongsToAB = (id >= 188 && id <= 342) || id === 329 || id === 333 || id === 335 || id === 338 || id === 340 || id === 342;
     
-    return {
+    const baseMerged = {
       id,
       title: up.title || `Fiche #${id}`,
       topic: up.topic || 'Autre',
@@ -286,10 +286,14 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
       status3: up.status3 || 'A faire',
       coursFile: up.coursFile || `${id}_cours.pdf`,
       coursFileUrl: up.coursFileUrl || '',
+      ...up
+    };
+
+    return {
+      ...baseMerged,
       inZoneA: up.inZoneA !== undefined ? up.inZoneA : belongsToAB,
       inZoneB: up.inZoneB !== undefined ? up.inZoneB : belongsToAB,
       inZoneC: up.inZoneC !== undefined ? up.inZoneC : true,
-      ...up
     } as Fiche;
   });
 

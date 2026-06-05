@@ -95,6 +95,16 @@ export const initialFiches: Fiche[] = [
     status2: "A faire",
     coursFile: "195_Py_B3_M03_S008_La structuration logique en HTML5 et le modèle de boîtes en CSS3.pdf"
   },
+  {
+    id: 199,
+    title: "199_Py_B3_M03_S012_La création de formulaires",
+    topic: "HTML & CSS",
+    action: "Pratique (Coder l'interface). Ouvrir le fichier HTML. Écrire la balise <form>. Ajouter <input> pour Nom, Prénom, Email, et un champ <input type=\"file\"> pour charger des documents. Ajouter un bouton <button type=\"submit\">.",
+    motorsLink: "Le cahier des charges impose : \"Le client doit s'inscrire pour déposer son dossier\". C'est ce code qui crée le formulaire dématérialisé.",
+    status1: "A faire",
+    status2: "A faire",
+    coursFile: "199_Py_B3_M03_S012_La création de formulaires.pdf"
+  },
   
   // Bootstrap
   {
@@ -136,6 +146,26 @@ export const initialFiches: Fiche[] = [
     status1: "A faire",
     status2: "A faire",
     coursFile: "208_Py_B3_M03_S021_Les composants bootstrap.pdf"
+  },
+  {
+    id: 240,
+    title: "240_Py_B3_M05_S013_La Gestion d'erreur",
+    topic: "Python Quality & Flask",
+    action: "Lecture (Comprendre la sécurité). Lire le cours pour repérer la syntaxe try / except en Python. Apprendre à l'utiliser pour intercepter une erreur (ex: déconnexion) sans faire planter tout le site web.",
+    motorsLink: "Répond directement à la question obligatoire du Dossier 2 : \"Comment surveillez-vous votre application (logs, gestion d’erreur)\".",
+    status1: "A faire",
+    status2: "A faire",
+    coursFile: "240_Py_B3_M05_S013_La Gestion d'erreur.pdf"
+  },
+  {
+    id: 241,
+    title: "241_Py_B3_M05_S014_Debug",
+    topic: "Python Quality & Flask",
+    action: "Pratique (Pister les bugs). Apprendre à insérer des print() dans ton code ou utiliser le panneau \"Débogage\" de VS Code pour vérifier, au moment de l'exécution, si ton formulaire envoie les bonnes données client.",
+    motorsLink: "Évalue directement un critère obligatoire du Dossier 2 : \"Ses pratiques pour identifier la source des bogues\".",
+    status1: "A faire",
+    status2: "A faire",
+    coursFile: "241_Py_B3_M05_S014_Debug.pdf"
   },
 
   // Databases
@@ -198,6 +228,36 @@ export const initialFiches: Fiche[] = [
     status1: "A faire",
     status2: "A faire",
     coursFile: "250_Py_B3_M06_S007_Découvrir un autre SGBDR - PostgreSQL.pdf"
+  },
+  {
+    id: 252,
+    title: "252_Py_B3_M06_S009_PHP/PDO : accès en lecture/écriture",
+    topic: "Bases de Données",
+    action: "Pratique (La connexion). /!\\ Le titre du cours parle de PHP, mais toi tu adaptes en Python. Ouvrir VS Code. Installer psycopg2. Écrire la ligne de connexion (conn = psycopg2.connect(...)) avec le login/mot de passe de ta base Postgres.",
+    motorsLink: "C'est le lien nerveux de l'application. Sans cette connexion, Flask (Python) ne peut pas lire ni envoyer les infos d'un client dans la base.",
+    status1: "A faire",
+    status2: "A faire",
+    coursFile: "252_Py_B3_M06_S009_PHP_PDO : accès en lecture_écriture.pdf"
+  },
+  {
+    id: 253,
+    title: "253_Py_B3_M06_S010_Les requetes SQL",
+    topic: "Bases de Données",
+    action: "Pratique (Modifier l'existant). S'entraîner à taper des requêtes de modification comme UPDATE vehicules SET statut = 'vente' WHERE id = 1; pour modifier le contenu d'une cellule de la base.",
+    motorsLink: "Commande technique exacte pour réaliser la fonction exigée : \"Basculer un véhicule de location => vente et de vente => location\".",
+    status1: "A faire",
+    status2: "A faire",
+    coursFile: "253_Py_B3_M06_S010_Les requetes SQL.pdf"
+  },
+  {
+    id: 255,
+    title: "255_Py_B3_M06_S012_Les jointures SQL",
+    topic: "Bases de Données",
+    action: "Pratique (Croiser les données). Taper une requête utilisant INNER JOIN (ex: SELECT * FROM clients INNER JOIN dossiers ON clients.id = dossiers.client_id;) pour lier le profil du client à ses documents téléchargés.",
+    motorsLink: "Indispensable pour construire l'écran du back-office : \"Visualisation des dossiers de location/achat\" (afficher le client ET son dossier).",
+    status1: "A faire",
+    status2: "A faire",
+    coursFile: "255_Py_B3_M06_S012_Les jointures SQL.pdf"
   },
 
   // Python Backend
@@ -270,6 +330,16 @@ export const initialFiches: Fiche[] = [
     status1: "A faire",
     status2: "A faire",
     coursFile: "267_Py_B3_M08_S007_Structure d'un programme - fonctions.pdf"
+  },
+  {
+    id: 269,
+    title: "269_Py_B3_M08_S009_Structure d'un programme - modules",
+    topic: "Python Backend",
+    action: "Pratique (Nettoyer le projet). Ne pas coder un seul gros fichier app.py. Le découper en créant un fichier séparé routes.py (pour les URL) et utiliser l'instruction import pour lier les deux fichiers dans VS Code.",
+    motorsLink: "Répond au critère de notation strict du Dossier 1 : \"Respect rigoureux des standards de qualité de code en termes de lisibilité et de maintenabilité\".",
+    status1: "A faire",
+    status2: "A faire",
+    coursFile: "269_Py_B3_M08_S009_Structure d'un programme - modules.pdf"
   },
 
   // Python Quality & Flask
@@ -362,6 +432,26 @@ export const initialFiches: Fiche[] = [
     slide2: "https://drive.google.com/file/d/1S2KuldEwKoLxVL0OyhqOXx_lAi1OQvyA/view?usp=drive_link"
   },
   {
+    id: 333,
+    title: "333_Py_B3_M12_S006_La gestion des branches",
+    topic: "APIs, Git & Sécurité",
+    action: "Pratique (Créer un bac à sable). Ouvrir GitHub Desktop. Cliquer sur le menu déroulant des branches (Current Branch), et cliquer sur \"New Branch\" (ex: nommer la branche dev-formulaire). Travailler dessus, puis cliquer sur \"Merge\" pour valider sur main.",
+    motorsLink: "Répond directement et précisément à la consigne d'introduction du Dossier 1 : documenter \"La préparation de votre git ainsi que la gestion de vos branches\".",
+    status1: "A faire",
+    status2: "A faire",
+    coursFile: "333_Py_B3_M12_S006_La gestion des branches.pdf"
+  },
+  {
+    id: 335,
+    title: "335_Py_B3_M12_S008_Les bonnes pratiques",
+    topic: "APIs, Git & Sécurité",
+    action: "Lecture (Faire pro sur Git). Apprendre à rédiger le petit texte obligatoire à chaque sauvegarde Git (le \"message de commit\"). Il doit être court, clair, et indiquer l'action (ex: \"feat: création page contact\").",
+    motorsLink: "Te donne les arguments méthodologiques pour prouver au correcteur que tu maîtrises les standards professionnels exigés dans le Dossier 1.",
+    status1: "A faire",
+    status2: "A faire",
+    coursFile: "335_Py_B3_M12_S008_Les bonnes pratiques.pdf"
+  },
+  {
     id: 338,
     title: "338_Py_B3_M13_S001_Améliorer sa solution",
     topic: "APIs, Git & Sécurité",
@@ -384,5 +474,15 @@ export const initialFiches: Fiche[] = [
     coursFile: "340_Py_B3_M13_S003_Le pentest.pdf",
     slide1: "https://drive.google.com/file/d/1UIXJWSbTyFF0gQUSnTJbb1k0ixe4RM1_/view?usp=drive_link",
     slide2: "https://drive.google.com/file/d/1UIXJWSbTyFF0gQUSnTJbb1k0ixe4RM1_/view?usp=drive_link"
+  },
+  {
+    id: 342,
+    title: "342_Py_B3_M13_S005_Documentation de l'architecture et du code",
+    topic: "APIs, Git & Sécurité",
+    action: "Pratique (Guide d'installation). Créer un fichier texte nommé README.md à la racine de ton dossier VS Code. Écrire le mode d'emploi pour le correcteur : commandes pour installer les outils, lancer Flask, et la liste des logins/mots de passe de test (ex: profil admin).",
+    motorsLink: "Rédiger cette notice remplit l'exigence \"Concevez une documentation technique\" (Dossier 1) et garantit que le correcteur pourra allumer et vérifier ton projet.",
+    status1: "A faire",
+    status2: "A faire",
+    coursFile: "342_Py_B3_M13_S005_Documentation de l'architecture et du code.pdf"
   }
 ];

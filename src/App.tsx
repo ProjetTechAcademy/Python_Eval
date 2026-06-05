@@ -118,10 +118,16 @@ export default function App() {
         list = initialFiches;
       }
     }
-    return list.map(f => ({
-      ...f,
-      status3: f.status3 || 'A faire'
-    }));
+    return list.map(f => {
+      const belongsToAB = (f.id >= 188 && f.id <= 342) || f.id === 329 || f.id === 333 || f.id === 335 || f.id === 338 || f.id === 340 || f.id === 342;
+      return {
+        ...f,
+        status3: f.status3 || 'A faire',
+        inZoneA: f.inZoneA !== undefined ? f.inZoneA : belongsToAB,
+        inZoneB: f.inZoneB !== undefined ? f.inZoneB : belongsToAB,
+        inZoneC: f.inZoneC !== undefined ? f.inZoneC : true,
+      };
+    });
   });
 
   const [activeZone, setActiveZone] = useState<'A' | 'B' | 'C'>('A'); // Zone A: Personal, Zone B: Jury, Zone C: Common
