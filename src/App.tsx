@@ -3,6 +3,7 @@ import { initialFiches, EVAL_FICHES_IDS } from './data/initialData';
 import { Fiche, FicheStatus } from './types';
 import ThreeDBox from './components/ThreeDBox';
 import ResourcePlayer from './components/ResourcePlayer';
+import IntegratedAudioVisualPlayer from './components/IntegratedAudioVisualPlayer';
 import CsvLoader, { getBasePubUrl, parseSingleTextToSheet, mergeSheets } from './components/CsvLoader';
 import SpeechReaderModal from './components/SpeechReaderModal';
 import {
@@ -760,7 +761,7 @@ export default function App() {
                       <button
                         onClick={() => setSelectedResourceForPreview({
                           title: fiche.title,
-                          resourceName: "Document PDF de Support d'Étude",
+                          resourceName: fiche.coursFile || "Document PDF de Support d'Étude",
                           url: fiche.coursFileUrl || fiche.coursFile,
                           type: 'slide',
                           ficheId: fiche.id
@@ -1045,118 +1046,94 @@ export default function App() {
 
         {/* COLLAPSIBLE INTEGRATED IN-APP PREVIEW PLAYER (ZERO WASTED SPACE, 100% RESPONSIVE WIDTH) */}
         {selectedResourceForPreview && selectedResourceForPreview.ficheId === fiche.id && (
-          <div className="w-full mt-4 bg-slate-950 p-4 sm:p-5 rounded-2xl border border-slate-800 text-slate-100 flex flex-col gap-3.5 animate-slideDown shadow-2xl">
-            {/* Direct Player Header */}
-            <div className="flex items-center justify-between text-white border-b border-white/[0.08] pb-3 text-xs gap-3 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="text-blue-405 font-mono text-[9px] bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 uppercase font-black">
-                  LECTEUR DIRECT {selectedResourceForPreview.type === 'audio' ? '🔊' : '📄'}
-                </span>
-                <span className="font-extrabold text-slate-200 truncate max-w-[200px] sm:max-w-xs md:max-w-md">
-                  {selectedResourceForPreview.resourceName}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => setSelectedSpeechFiche(fiche)}
-                  className="p-1 px-2.5 bg-gradient-to-r from-[#4285F4] to-indigo-650 hover:from-blue-600 hover:to-indigo-750 text-white rounded-lg transition-all text-[10px] flex items-center gap-1 font-bold border border-transparent shadow hover:scale-105 active:scale-95 cursor-pointer select-none"
-                  title="Ouvrir le liseur vocal pour ce document"
-                >
-                  <Volume2 className="w-3.5 h-3.5" /> Lire à haute voix 🔊
-                </button>
-                <a
-                  href={selectedResourceForPreview.url}
-                  target="_blank"
-                  referrerPolicy="no-referrer"
-                  rel="noopener noreferrer"
-                  className="p-1 px-2.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg transition-all text-[10px] flex items-center gap-1 font-bold border border-white/[0.08]"
-                >
-                  Ouvrir externe ↗
-                </a>
-                <button
-                  onClick={() => setPreviewHeight(prev => prev === 'compact' ? 'large' : 'compact')}
-                  className="p-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-all text-[10px] flex items-center gap-1 font-extrabold cursor-pointer border border-slate-700 shadow-sm"
-                >
-                  {previewHeight === 'compact' ? '↕️ Mode Plein Écran' : '↕️ Mode Compact'}
-                </button>
-                <button
-                  onClick={() => setSelectedResourceForPreview(null)}
-                  className="text-white font-black text-[10px] p-1 px-2 bg-red-650 hover:bg-red-700 rounded-lg transition-all cursor-pointer shadow-sm"
-                >
-                  ✕ Fermer
-                </button>
-              </div>
-            </div>
-
-            {/* Content preview direct frame */}
-            {selectedResourceForPreview.type === 'audio' ? (
-              <div className="w-full flex flex-col gap-3">
-                <div className="p-4 bg-emerald-950/30 rounded-xl border border-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-center sm:text-left">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-emerald-500/10 text-emerald-300 rounded-full border border-emerald-500/20">
-                      <Volume2 className="w-5 h-5 animate-pulse" />
-                    </div>
-                    <div>
-                      <h5 className="text-sm font-bold text-slate-100">{selectedResourceForPreview.resourceName}</h5>
-                      <p className="text-[10px] text-slate-400 font-medium">Lecteur officiel Google Drive intégré &bull; Lecture directe</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-mono self-center">
-                    GOOGLE DRIVE AUDIO
+          selectedResourceForPreview.type === 'audio' ? (
+            <IntegratedAudioVisualPlayer
+              fiche={fiche}
+              activeZone={activeZone}
+              selectedResourceForPreview={selectedResourceForPreview}
+              previewHeight={previewHeight}
+              onClose={() => setSelectedResourceForPreview(null)}
+              onSetHeight={setPreviewHeight}
+              onSpeechActivate={() => setSelectedSpeechFiche(fiche)}
+            />
+          ) : (
+            <div className="w-full mt-4 bg-slate-950 p-4 sm:p-5 rounded-2xl border border-slate-800 text-slate-100 flex flex-col gap-3.5 animate-slideDown shadow-2xl">
+              {/* Direct Player Header */}
+              <div className="flex items-center justify-between text-white border-b border-white/[0.08] pb-3 text-xs gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-405 font-mono text-[9px] bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 uppercase font-black">
+                    LECTEUR DIRECT 📄
+                  </span>
+                  <span className="font-extrabold text-slate-200 truncate max-w-[200px] sm:max-w-xs md:max-w-md">
+                    {selectedResourceForPreview.resourceName}
                   </span>
                 </div>
-                {getDriveEmbedUrl(selectedResourceForPreview.url) ? (
-                  <div className="w-full h-[180px] sm:h-[220px] relative rounded-xl overflow-hidden bg-slate-900 border border-slate-805 shadow-inner">
-                    <iframe 
-                      src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
-                      className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
-                      allow="autoplay; encrypted-media"
-                      title="In-App Audio"
-                    />
-                  </div>
-                ) : (
-                  <div className="p-4 bg-slate-900 rounded-xl border border-slate-800">
-                    <audio 
-                      src={selectedResourceForPreview.url} 
-                      controls 
-                      autoPlay
-                      className="w-full outline-none"
-                    />
-                  </div>
-                )}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => setSelectedSpeechFiche(fiche)}
+                    className="p-1 px-2.5 bg-gradient-to-r from-[#4285F4] to-indigo-650 hover:from-blue-600 hover:to-indigo-750 text-white rounded-lg transition-all text-[10px] flex items-center gap-1 font-bold border border-transparent shadow hover:scale-105 active:scale-95 cursor-pointer select-none"
+                    title="Ouvrir le liseur vocal pour ce document"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" /> Synthèse Vocale 🔊
+                  </button>
+                  <a
+                    href={selectedResourceForPreview.url}
+                    target="_blank"
+                    referrerPolicy="no-referrer"
+                    rel="noopener noreferrer"
+                    className="p-1 px-2.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg transition-all text-[10px] flex items-center gap-1 font-bold border border-white/[0.08]"
+                  >
+                    Ouvrir externe ↗
+                  </a>
+                  <button
+                    onClick={() => setPreviewHeight(prev => prev === 'compact' ? 'large' : 'compact')}
+                    className="p-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-all text-[10px] flex items-center gap-1 font-extrabold cursor-pointer border border-slate-700 shadow-sm"
+                  >
+                    {previewHeight === 'compact' ? '↕️ Mode Plein Écran' : '↕️ Mode Compact'}
+                  </button>
+                  <button
+                    onClick={() => setSelectedResourceForPreview(null)}
+                    className="text-white font-black text-[10px] p-1 px-2 bg-red-650 hover:bg-red-700 rounded-lg transition-all cursor-pointer shadow-sm"
+                  >
+                    ✕ Fermer
+                  </button>
+                </div>
               </div>
-            ) : getDriveEmbedUrl(selectedResourceForPreview.url) ? (
-              <div className={`w-full relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 transition-all duration-300 ${
-                previewHeight === 'compact' ? 'h-[280px]' : 'h-[550px]'
-              }`}>
-                <iframe 
-                  src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
-                  className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
-                  allow="autoplay; encrypted-media"
-                  title="In-App Preview"
-                />
-              </div>
-            ) : (
-              <div className="p-8 text-center text-slate-300 bg-slate-900 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
-                <span className="text-3xl mb-2">⚠️</span>
-                <h5 className="font-bold text-sm text-slate-100">Intégration directe non supportée</h5>
-                <p className="text-xs text-slate-404 mt-1 max-w-sm">Ce fichier requiert une authentification externe ou une extension de sécurité.</p>
-                <a 
-                  href={selectedResourceForPreview.url} 
-                  target="_blank" 
-                  referrerPolicy="no-referrer"
-                  rel="noopener noreferrer" 
-                  className="mt-4 px-4 py-2 bg-[#4285F4] hover:bg-blue-600 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow"
-                >
-                  Ouvrir externe <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
-            )}
 
-            <div className="text-[10px] text-slate-400 italic">
-              💡 Lecture sécurisée dans l'application &bull; Prévient les redirections externes
+              {/* Content preview direct frame */}
+              {getDriveEmbedUrl(selectedResourceForPreview.url) ? (
+                <div className={`w-full relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 transition-all duration-300 ${
+                  previewHeight === 'compact' ? 'h-[280px]' : 'h-[550px]'
+                }`}>
+                  <iframe 
+                    src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
+                    className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
+                    allow="autoplay; encrypted-media"
+                    title="In-App Preview"
+                  />
+                </div>
+              ) : (
+                <div className="p-8 text-center text-slate-300 bg-slate-900 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
+                  <span className="text-3xl mb-2">⚠️</span>
+                  <h5 className="font-bold text-sm text-slate-100">Intégration directe non supportée</h5>
+                  <p className="text-xs text-slate-450 mt-1 max-w-sm">Ce fichier requiert une authentification externe ou une extension de sécurité.</p>
+                  <a 
+                    href={selectedResourceForPreview.url} 
+                    target="_blank" 
+                    referrerPolicy="no-referrer"
+                    rel="noopener noreferrer" 
+                    className="mt-4 px-4 py-2 bg-[#4285F4] hover:bg-blue-600 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow"
+                  >
+                    Ouvrir externe <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              )}
+
+              <div className="text-[10px] text-slate-400 italic">
+                💡 Lecture sécurisée dans l'application &bull; Prévient les redirections externes
+              </div>
             </div>
-          </div>
+          )
         )}
 
       </div>
@@ -2321,7 +2298,7 @@ export default function App() {
                                 <button
                                   onClick={() => setSelectedResourceForPreview({
                                     title: fiche.title,
-                                    resourceName: "Document PDF de Support d'Étude",
+                                    resourceName: fiche.coursFile || "Document PDF de Support d'Étude",
                                     url: fiche.coursFileUrl || fiche.coursFile,
                                     type: 'slide',
                                     ficheId: fiche.id
@@ -2606,118 +2583,94 @@ export default function App() {
 
                   {/* COLLAPSIBLE INTEGRATED IN-APP PREVIEW PLAYER (ZERO WASTED SPACE, 100% RESPONSIVE WIDTH) */}
                   {selectedResourceForPreview && selectedResourceForPreview.ficheId === fiche.id && (
-                    <div className="w-full mt-4 bg-slate-950 p-4 sm:p-6 rounded-2xl border border-slate-800 text-slate-100 flex flex-col gap-4 animate-slideDown shadow-2xl">
-                      {/* Reader Header */}
-                      <div className="flex items-center justify-between text-white border-b border-white/[0.08] pb-3 text-xs gap-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-blue-400 font-mono text-[10px] bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 uppercase font-black">
-                            LECTEUR DIRECT {selectedResourceForPreview.type === 'audio' ? '🔊' : '📄'}
-                          </span>
-                          <span className="font-extrabold text-slate-200 truncate max-w-[200px] sm:max-w-xs md:max-w-md">
-                            {selectedResourceForPreview.resourceName}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setSelectedSpeechFiche(fiche)}
-                            className="p-1 px-2.5 bg-gradient-to-r from-[#4285F4] to-indigo-600 hover:from-blue-600 hover:to-indigo-750 text-white rounded-lg transition-all text-[11px] flex items-center gap-1 font-bold border border-transparent shadow hover:scale-105 active:scale-95 cursor-pointer selection:none"
-                            title="Ouvrir le liseur vocal intelligent pour lire ce document à haute voix"
-                          >
-                            <Volume2 className="w-3.5 h-3.5" /> Lire à haute voix 🔊
-                          </button>
-                          <a
-                            href={selectedResourceForPreview.url}
-                            target="_blank"
-                            referrerPolicy="no-referrer"
-                            rel="noopener noreferrer"
-                            className="p-1 px-2.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg transition-all text-[11px] flex items-center gap-1 font-bold border border-white/[0.08]"
-                          >
-                            Ouvrir externe ↗
-                          </a>
-                          <button
-                            onClick={() => setPreviewHeight(prev => prev === 'compact' ? 'large' : 'compact')}
-                            className="p-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-all text-[11px] flex items-center gap-1 font-extrabold cursor-pointer border border-slate-700 shadow-sm"
-                          >
-                            {previewHeight === 'compact' ? '↕️ Mode Plein Écran' : '↕️ Mode Compact'}
-                          </button>
-                          <button
-                            onClick={() => setSelectedResourceForPreview(null)}
-                            className="text-white font-black text-xs p-1 px-2.5 bg-red-650 hover:bg-red-650 rounded-lg transition-all cursor-pointer shadow-sm bg-red-605"
-                          >
-                            Fermer le lecteur ✕
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Display content inside card */}
-                      {selectedResourceForPreview.type === 'audio' ? (
-                        <div className="w-full flex flex-col gap-3">
-                          <div className="p-4 bg-emerald-950/30 rounded-xl border border-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-center sm:text-left">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2.5 bg-emerald-500/10 text-emerald-300 rounded-full border border-emerald-500/20">
-                                <Volume2 className="w-5 h-5 animate-pulse" />
-                              </div>
-                              <div>
-                                <h5 className="text-sm font-bold text-slate-100">{selectedResourceForPreview.resourceName}</h5>
-                                <p className="text-[10px] text-slate-400">Lecteur officiel Google Drive intégré &bull; Lecture directe</p>
-                              </div>
-                            </div>
-                            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-mono self-center">
-                              GOOGLE DRIVE AUDIO
+                    selectedResourceForPreview.type === 'audio' ? (
+                      <IntegratedAudioVisualPlayer
+                        fiche={fiche}
+                        activeZone={activeZone}
+                        selectedResourceForPreview={selectedResourceForPreview}
+                        previewHeight={previewHeight}
+                        onClose={() => setSelectedResourceForPreview(null)}
+                        onSetHeight={setPreviewHeight}
+                        onSpeechActivate={() => setSelectedSpeechFiche(fiche)}
+                      />
+                    ) : (
+                      <div className="w-full mt-4 bg-slate-950 p-4 sm:p-6 rounded-2xl border border-slate-800 text-slate-100 flex flex-col gap-4 animate-slideDown shadow-2xl">
+                        {/* Reader Header */}
+                        <div className="flex items-center justify-between text-white border-b border-white/[0.08] pb-3 text-xs gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-blue-400 font-mono text-[10px] bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 uppercase font-black">
+                              LECTEUR DIRECT 📄
+                            </span>
+                            <span className="font-extrabold text-slate-200 truncate max-w-[200px] sm:max-w-xs md:max-w-md">
+                              {selectedResourceForPreview.resourceName}
                             </span>
                           </div>
-                          {getDriveEmbedUrl(selectedResourceForPreview.url) ? (
-                            <div className="w-full h-[180px] sm:h-[220px] relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 shadow-inner">
-                              <iframe 
-                                src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
-                                className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
-                                allow="autoplay; encrypted-media"
-                                title="In-App Audio Player"
-                              />
-                            </div>
-                          ) : (
-                            <div className="p-4 bg-slate-900 rounded-xl border border-slate-800">
-                              <audio 
-                                src={selectedResourceForPreview.url} 
-                                controls 
-                                autoPlay
-                                className="w-full outline-none"
-                              />
-                            </div>
-                          )}
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setSelectedSpeechFiche(fiche)}
+                              className="p-1 px-2.5 bg-gradient-to-r from-[#4285F4] to-indigo-650 hover:from-blue-600 hover:to-indigo-750 text-white rounded-lg transition-all text-[11px] flex items-center gap-1 font-bold border border-transparent shadow hover:scale-105 active:scale-95 cursor-pointer select-none"
+                              title="Ouvrir le liseur vocal intelligent pour lire ce document à haute voix"
+                            >
+                              <Volume2 className="w-3.5 h-3.5" /> Lire à haute voix 🔊
+                            </button>
+                            <a
+                              href={selectedResourceForPreview.url}
+                              target="_blank"
+                              referrerPolicy="no-referrer"
+                              rel="noopener noreferrer"
+                              className="p-1 px-2.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg transition-all text-[11px] flex items-center gap-1 font-bold border border-white/[0.08]"
+                            >
+                              Ouvrir externe ↗
+                            </a>
+                            <button
+                              onClick={() => setPreviewHeight(prev => prev === 'compact' ? 'large' : 'compact')}
+                              className="p-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-all text-[11px] flex items-center gap-1 font-extrabold cursor-pointer border border-slate-700 shadow-sm"
+                            >
+                              {previewHeight === 'compact' ? '↕️ Mode Plein Écran' : '↕️ Mode Compact'}
+                            </button>
+                            <button
+                              onClick={() => setSelectedResourceForPreview(null)}
+                              className="text-white font-black text-xs p-1 px-2.5 bg-red-650 hover:bg-red-700 rounded-lg transition-all cursor-pointer shadow-sm"
+                            >
+                              Fermer le lecteur ✕
+                            </button>
+                          </div>
                         </div>
-                      ) : getDriveEmbedUrl(selectedResourceForPreview.url) ? (
-                        <div className={`w-full relative rounded-xl overflow-hidden bg-slate-905 border border-slate-800 transition-all duration-300 ${
-                          previewHeight === 'compact' ? 'h-[280px]' : 'h-[550px]'
-                        }`}>
-                          <iframe 
-                            src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
-                            className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
-                            allow="autoplay; encrypted-media"
-                            title="In-App Preview"
-                          />
-                        </div>
-                      ) : (
-                        <div className="p-8 text-center text-slate-300 bg-slate-900 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
-                          <span className="text-3xl mb-2">⚠️</span>
-                          <h5 className="font-bold text-sm text-slate-100">Intégration directe non supportée</h5>
-                          <p className="text-xs text-slate-400 mt-1 max-w-sm">Ce fichier requiert une authentification externe ou une extension de sécurité.</p>
-                          <a 
-                            href={selectedResourceForPreview.url} 
-                            target="_blank" 
-                            referrerPolicy="no-referrer"
-                            rel="noopener noreferrer" 
-                            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow"
-                          >
-                            Ouvrir dans un nouvel onglet externe <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        </div>
-                      )}
 
-                      <div className="text-[10px] text-slate-400 italic">
-                        💡 Lecture sécurisée dans l'application &bull; Prévient les redirections externes
+                        {/* Display content inside card */}
+                        {getDriveEmbedUrl(selectedResourceForPreview.url) ? (
+                          <div className={`w-full relative rounded-xl overflow-hidden bg-slate-905 border border-slate-800 transition-all duration-300 ${
+                            previewHeight === 'compact' ? 'h-[280px]' : 'h-[550px]'
+                          }`}>
+                            <iframe 
+                              src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
+                              className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
+                              allow="autoplay; encrypted-media"
+                              title="In-App Preview"
+                            />
+                          </div>
+                        ) : (
+                          <div className="p-8 text-center text-slate-300 bg-slate-900 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
+                            <span className="text-3xl mb-2">⚠️</span>
+                            <h5 className="font-bold text-sm text-slate-100">Intégration directe non supportée</h5>
+                            <p className="text-xs text-slate-400 mt-1 max-w-sm">Ce fichier requiert une authentification externe ou une extension de sécurité.</p>
+                            <a 
+                              href={selectedResourceForPreview.url} 
+                              target="_blank" 
+                              referrerPolicy="no-referrer"
+                              rel="noopener noreferrer" 
+                              className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow"
+                            >
+                              Ouvrir dans un nouvel onglet externe <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
+                        )}
+
+                        <div className="text-[10px] text-slate-400 italic">
+                          💡 Lecture sécurisée dans l'application &bull; Prévient les redirections externes
+                        </div>
                       </div>
-                    </div>
+                    )
                   )}
 
                 </div>

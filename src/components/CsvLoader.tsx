@@ -313,18 +313,23 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
     // Default fallback zone memberships for common files of Bloc 3
     const isEvalFiche = EVAL_FICHES_IDS.has(id);
     
+    const finalTitle = up.title || `Fiche #${id}`;
+    const computedCoursFile = (up.coursFile && !up.coursFile.endsWith('_cours.pdf'))
+      ? up.coursFile 
+      : `${finalTitle}.pdf`;
+
     const baseMerged = {
       id,
-      title: up.title || `Fiche #${id}`,
+      title: finalTitle,
       topic: up.topic || 'Autre',
       action: up.action || '',
       motorsLink: up.motorsLink || '',
       status1: up.status1 || 'A faire',
       status2: up.status2 || 'A faire',
       status3: up.status3 || 'A faire',
-      coursFile: up.coursFile || `${id}_cours.pdf`,
       coursFileUrl: up.coursFileUrl || '',
-      ...up
+      ...up,
+      coursFile: computedCoursFile
     };
 
     return {
