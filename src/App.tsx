@@ -28,6 +28,7 @@ import {
   Clock,
   AlertCircle,
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
   ChevronUp,
   TrendingUp,
@@ -70,6 +71,30 @@ function getDriveEmbedUrl(url: string | undefined): string | null {
   }
 
   return trimmed;
+}
+
+function isDirectVideoUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  const l = url.toLowerCase();
+  return l.endsWith('.mp4') || 
+         l.endsWith('.webm') || 
+         l.endsWith('.mov') || 
+         l.endsWith('.ogg') ||
+         l.includes('.mp4?') ||
+         l.includes('.webm?') ||
+         l.includes('/video/');
+}
+
+function getYoutubeEmbedUrl(url: string | undefined): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = trimmed.match(regExp);
+
+  if (match && match[2].length === 11) {
+    return `https://www.youtube.com/embed/${match[2]}?autoplay=1`;
+  }
+  return null;
 }
 
 function getTopicBadgeStyle(topic: string) {
@@ -271,6 +296,10 @@ export default function App() {
     return (localMode as 'continue' | 'segmented' | 'planning') || 'segmented'; // Default to organized segmented view for easy navigation
   });
 
+  const [planningSubView, setPlanningSubView] = useState<'calendar' | 'history'>('calendar');
+  const [planningHistorySearch, setPlanningHistorySearch] = useState<string>('');
+  const [planningHistoryZone, setPlanningHistoryZone] = useState<'all' | 'A' | 'B' | 'C'>('all');
+
   const [expandedBlocks, setExpandedBlocks] = useState<Record<string, boolean>>({
     'B0': true,
     'B1': true,
@@ -313,7 +342,11 @@ export default function App() {
   const [reminderType, setReminderType] = useState<'spaced' | 'custom'>('spaced');
   const [customDateValue, setCustomDateValue] = useState<string>('');
 
-  // SOUND SCAPES AMBIENT MEDIA CONTROLLER
+  // PLANNING CALENDAR STATE
+  const [calendarDate, setCalendarDate] = useState<Date>(() => new Date(2026, 5, 1)); // Displays June 2026 by default as it is the current timeline!
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<string>("2026-06-06"); // Set default selected day to today
+
+  // SOUND SCAPES AMBIENT MEDIA CONTROLLER WITH STABLE RAW GITHUB ASSETS
   const [ambientSounds, setAmbientSounds] = useState<Record<string, { playing: boolean; volume: number }>>({
     rain: { playing: false, volume: 0.5 },
     waves: { playing: false, volume: 0.4 },
@@ -328,43 +361,72 @@ export default function App() {
     fire: null,
   });
 
-  useEffect(() => {
+  // User-activation thread play command to strictly satisfy autoplay policies
+  const handleToggleAmbientSound = (soundKey: string) => {
     const sources: Record<string, string> = {
-      rain: 'https://www.soundjay.com/nature/sounds/rain-07.mp3',
-      waves: 'https://www.soundjay.com/nature/sounds/ocean-wave-1.mp3',
-      birds: 'https://www.soundjay.com/nature/sounds/forest-wind-1.mp3',
-      fire: 'https://www.soundjay.com/nature/sounds/fire-1.mp3'
+      rain: 'https://raw.githubusercontent.com/alexandrius/ambient-sounds-player/master/audio/rain.mp3',
+      waves: 'https://raw.githubusercontent.com/alexandrius/ambient-sounds-player/master/audio/ocean.mp3',
+      birds: 'https://raw.githubusercontent.com/alexandrius/ambient-sounds-player/master/audio/birds.mp3',
+      fire: 'https://raw.githubusercontent.com/alexandrius/ambient-sounds-player/master/audio/campfire.mp3'
     };
 
-    Object.keys(sources).forEach((key) => {
+    setAmbientSounds(prev => {
+      const isNextPlaying = !prev[soundKey].playing;
+      
       try {
-        if (!audioRefs.current[key]) {
-          const audio = new Audio(sources[key]);
+        if (!audioRefs.current[soundKey]) {
+          const audio = new Audio(sources[soundKey]);
           audio.loop = true;
-          audioRefs.current[key] = audio;
+          audioRefs.current[soundKey] = audio;
         }
-        const audio = audioRefs.current[key]!;
-        audio.volume = ambientSounds[key].volume;
-        
-        if (ambientSounds[key].playing) {
-          audio.play().catch(e => console.log("Ambient sound play blocked by browser:", e));
+
+        const audio = audioRefs.current[soundKey]!;
+        audio.volume = prev[soundKey].volume;
+
+        if (isNextPlaying) {
+          // Play in direct stack context of user gesture
+          audio.play().catch(e => {
+            console.warn("Direct play failed, retrying after a tiny timeout:", e);
+            setTimeout(() => {
+              audio.play().catch(secondaryErr => console.error("Autoplay bypassed failed:", secondaryErr));
+            }, 50);
+          });
         } else {
           audio.pause();
         }
-      } catch (e) {
-        console.error("Ambient Audio Load Error:", e);
+      } catch (err) {
+        console.error("Critical Audio play state failure:", err);
+      }
+
+      return {
+        ...prev,
+        [soundKey]: { ...prev[soundKey], playing: isNextPlaying }
+      };
+    });
+  };
+
+  useEffect(() => {
+    // Keep volume levels in sync
+    Object.keys(ambientSounds).forEach((key) => {
+      const audio = audioRefs.current[key];
+      if (audio) {
+        audio.volume = ambientSounds[key].volume;
       }
     });
+  }, [ambientSounds]);
 
-    // Clean up sounds on unmount
+  // Clean up sounds on unmount
+  useEffect(() => {
     return () => {
       Object.keys(audioRefs.current).forEach(key => {
         if (audioRefs.current[key]) {
-          audioRefs.current[key]?.pause();
+          try {
+            audioRefs.current[key]?.pause();
+          } catch (e) {}
         }
       });
     };
-  }, [ambientSounds]);
+  }, []);
 
   // Calendar Event Builders
   const getCalendarLinks = (title: string, dateStr: string) => {
@@ -1231,7 +1293,7 @@ export default function App() {
                   <span className="text-blue-405 font-mono text-[9px] bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 uppercase font-black">
                     LECTEUR DIRECT 📄
                   </span>
-                  <span className="font-extrabold text-slate-200 truncate max-w-[200px] sm:max-w-xs md:max-w-md">
+                  <span className="font-extrabold text-slate-200 text-xs md:text-sm line-clamp-2 max-w-[180px] sm:max-w-xs md:max-w-md break-words whitespace-normal leading-tight block">
                     {selectedResourceForPreview.resourceName}
                   </span>
                 </div>
@@ -1268,33 +1330,72 @@ export default function App() {
               </div>
 
               {/* Content preview direct frame */}
-              {getDriveEmbedUrl(selectedResourceForPreview.url) ? (
-                <div className={`w-full relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 transition-all duration-300 ${
-                  previewHeight === 'compact' ? 'h-[280px]' : 'h-[550px]'
-                }`}>
-                  <iframe 
-                    src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
-                    className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
-                    allow="autoplay; encrypted-media"
-                    title="In-App Preview"
-                  />
-                </div>
-              ) : (
-                <div className="p-8 text-center text-slate-300 bg-slate-900 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
-                  <span className="text-3xl mb-2">⚠️</span>
-                  <h5 className="font-bold text-sm text-slate-100">Intégration directe non supportée</h5>
-                  <p className="text-xs text-slate-450 mt-1 max-w-sm">Ce fichier requiert une authentification externe ou une extension de sécurité.</p>
-                  <a 
-                    href={selectedResourceForPreview.url} 
-                    target="_blank" 
-                    referrerPolicy="no-referrer"
-                    rel="noopener noreferrer" 
-                    className="mt-4 px-4 py-2 bg-[#4285F4] hover:bg-blue-600 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow"
-                  >
-                    Ouvrir externe <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
-              )}
+              {(() => {
+                const url = selectedResourceForPreview.url;
+                const ytEmbed = getYoutubeEmbedUrl(url);
+                const isDirectVideo = isDirectVideoUrl(url) || selectedResourceForPreview.type === 'video';
+                const driveEmbed = getDriveEmbedUrl(url);
+
+                const containerHeight = previewHeight === 'compact' ? 'h-[280px]' : 'h-[550px]';
+
+                if (isDirectVideo) {
+                  return (
+                    <div className={`w-full relative rounded-xl overflow-hidden bg-black border border-slate-800 transition-all duration-300 ${containerHeight}`}>
+                      <video 
+                        src={url} 
+                        className="w-full h-full max-h-full rounded-xl bg-black object-contain" 
+                        controls 
+                        autoPlay 
+                        playsInline
+                      />
+                    </div>
+                  );
+                }
+
+                if (ytEmbed) {
+                  return (
+                    <div className={`w-full relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 transition-all duration-300 ${containerHeight}`}>
+                      <iframe 
+                        src={ytEmbed} 
+                        className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
+                        allow="autoplay; encrypted-media; picture-in-picture"
+                        allowFullScreen
+                        title="YouTube Video Preview"
+                      />
+                    </div>
+                  );
+                }
+
+                if (driveEmbed) {
+                  return (
+                    <div className={`w-full relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 transition-all duration-300 ${containerHeight}`}>
+                      <iframe 
+                        src={driveEmbed} 
+                        className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
+                        allow="autoplay; encrypted-media"
+                        title="In-App Preview"
+                      />
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="p-8 text-center text-slate-305 bg-slate-900 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
+                    <span className="text-3xl mb-2">⚠️</span>
+                    <h5 className="font-bold text-sm text-slate-100">Intégration directe non supportée</h5>
+                    <p className="text-xs text-slate-450 mt-1 max-w-sm">Ce fichier requiert une authentification externe ou une extension de sécurité.</p>
+                    <a 
+                      href={url} 
+                      target="_blank" 
+                      referrerPolicy="no-referrer"
+                      rel="noopener noreferrer" 
+                      className="mt-4 px-4 py-2 bg-[#4285F4] hover:bg-blue-600 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow"
+                    >
+                      Ouvrir externe <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                );
+              })()}
 
               <div className="text-[10px] text-slate-400 italic">
                 💡 Lecture sécurisée dans l'application &bull; Prévient les redirections externes
@@ -1308,6 +1409,72 @@ export default function App() {
   };
 
   const renderPlanningView = () => {
+    // Helper to parse localized French dates to standard ISO strings
+    const convertFrDateToIso = (frDate: string | undefined): string => {
+      if (!frDate) return '';
+      const parts = frDate.split('/');
+      if (parts.length === 3) {
+        const day = parts[0].padStart(2, '0');
+        const month = parts[1].padStart(2, '0');
+        const year = parts[2];
+        return `${year}-${month}-${day}`;
+      }
+      return frDate;
+    };
+
+    // Calculate completed learning logs on a specific day
+    const getCompletedHistory = () => {
+      const history: {
+        ficheId: number;
+        title: string;
+        topic: string;
+        block: string;
+        completedDate: string; // YYYY-MM-DD for matching
+        originalDateStr: string;
+        zone: 'Zone A' | 'Zone B' | 'Zone C';
+      }[] = [];
+
+      fiches.forEach(f => {
+        if (f.status1 === 'Fait' && f.date1) {
+          history.push({
+            ficheId: f.id,
+            title: f.title,
+            topic: f.topic,
+            block: f.block,
+            completedDate: convertFrDateToIso(f.date1),
+            originalDateStr: f.date1,
+            zone: 'Zone A'
+          });
+        }
+        if (f.status2 === 'Fait' && f.date2) {
+          history.push({
+            ficheId: f.id,
+            title: f.title,
+            topic: f.topic,
+            block: f.block,
+            completedDate: convertFrDateToIso(f.date2),
+            originalDateStr: f.date2,
+            zone: 'Zone B'
+          });
+        }
+        if ((f.status3 || 'A faire') === 'Fait' && f.date3) {
+          history.push({
+            ficheId: f.id,
+            title: f.title,
+            topic: f.topic,
+            block: f.block,
+            completedDate: convertFrDateToIso(f.date3),
+            originalDateStr: f.date3,
+            zone: 'Zone C'
+          });
+        }
+      });
+
+      return history;
+    };
+
+    const completedHistory = getCompletedHistory();
+
     // Collect all scheduled occurrences across all reminders
     const allOccurrences: {
       id: string; 
@@ -1338,10 +1505,11 @@ export default function App() {
     // Sort chronologically
     allOccurrences.sort((a, b) => a.dateStr.localeCompare(b.dateStr));
 
-    const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const todayStrRaw = new Date();
+    const todayStr = `${todayStrRaw.getFullYear()}-${String(todayStrRaw.getMonth() + 1).padStart(2, '0')}-${String(todayStrRaw.getDate()).padStart(2, '0')}`; // YYYY-MM-DD
+    
     const dueToday = allOccurrences.filter(occ => !occ.completed && occ.dateStr.startsWith(todayStr));
     const upcoming = allOccurrences.filter(occ => occ.dateStr > todayStr || (!occ.completed && occ.dateStr < todayStr && !occ.dateStr.startsWith(todayStr)));
-    const pastCompleted = allOccurrences.filter(occ => occ.completed);
 
     const toggleOccCompleted = (reminderId: string, label: string) => {
       setReminders(prev => prev.map(r => {
@@ -1371,35 +1539,165 @@ export default function App() {
       }
     };
 
+    // Calendar Calculations
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const monthNamesFr = [
+      "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", 
+      "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+    ];
+
+    const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDayIndexRaw = new Date(year, month, 1).getDay();
+    const indent = firstDayIndexRaw === 0 ? 6 : firstDayIndexRaw - 1; // Align to Monday as 0
+    const prevMonthTotalDays = new Date(year, month, 0).getDate();
+
+    const cells: {
+      dayNum: number;
+      dateStr: string;
+      isCurrentMonth: boolean;
+      isToday: boolean;
+    }[] = [];
+
+    // Preceding grayed days
+    for (let i = indent - 1; i >= 0; i--) {
+      const prevDayNum = prevMonthTotalDays - i;
+      const prevMonthIdx = month === 0 ? 11 : month - 1;
+      const prevYear = month === 0 ? year - 1 : year;
+      const dateStr = `${prevYear}-${String(prevMonthIdx + 1).padStart(2, '0')}-${String(prevDayNum).padStart(2, '0')}`;
+      cells.push({
+        dayNum: prevDayNum,
+        dateStr,
+        isCurrentMonth: false,
+        isToday: false
+      });
+    }
+
+    // Active month days
+    for (let d = 1; d <= totalDaysInMonth; d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      cells.push({
+        dayNum: d,
+        dateStr,
+        isCurrentMonth: true,
+        isToday: dateStr === todayStr
+      });
+    }
+
+    // Trailing days
+    const remainingSlots = 42 - cells.length;
+    for (let d = 1; d <= remainingSlots; d++) {
+      const nextMonthIdx = month === 11 ? 0 : month + 1;
+      const nextYear = month === 11 ? year + 1 : year;
+      const dateStr = `${nextYear}-${String(nextMonthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      cells.push({
+        dayNum: d,
+        dateStr,
+        isCurrentMonth: false,
+        isToday: false
+      });
+    }
+
+    // Mathilde selected day details
+    const selectedDayOccurrences = allOccurrences.filter(occ => occ.dateStr.startsWith(selectedCalendarDay));
+    const selectedDayCompletions = completedHistory.filter(h => h.completedDate === selectedCalendarDay);
+
+    const formatDayLabelFr = (isoDateStr: string) => {
+      const parts = isoDateStr.split('-');
+      if (parts.length === 3) {
+        const dayNum = parseInt(parts[2]);
+        const mIdx = parseInt(parts[1]) - 1;
+        const yearNum = parts[0];
+        const monthName = [
+          "janvier", "février", "mars", "avril", "mai", "juin", 
+          "juillet", "août", "septembre", "octobre", "novembre", "décembre"
+        ][mIdx] || parts[1];
+        return `${dayNum} ${monthName} ${yearNum}`;
+      }
+      return isoDateStr;
+    };
+
+    // Filter completions history list
+    const filteredHistory = completedHistory.filter(item => {
+      const matchesSearch = item.title.toLowerCase().includes(planningHistorySearch.toLowerCase()) || 
+                            item.topic.toLowerCase().includes(planningHistorySearch.toLowerCase()) || 
+                            item.block.toLowerCase().includes(planningHistorySearch.toLowerCase());
+      const matchesZone = planningHistoryZone === 'all' || item.zone.endsWith(planningHistoryZone);
+      return matchesSearch && matchesZone;
+    });
+
+    const previousMonth = () => {
+      setCalendarDate(new Date(year, month - 1, 1));
+    };
+
+    const nextMonth = () => {
+      setCalendarDate(new Date(year, month + 1, 1));
+    };
+
     return (
       <div className="flex flex-col gap-6 max-w-7xl mx-auto px-1 animate-fadeIn">
         
-        {/* Fuchsia-Orange Method Information Card */}
+        {/* Fuchsia-Orange Spaced Repetitions Concept Explanation Card */}
         <div className="bg-gradient-to-r from-pink-600 via-rose-500 to-orange-500 text-white rounded-3xl p-5 md:p-6 shadow-xl border border-pink-400/20 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full filter blur-2xl pointer-events-none -mr-12 -mt-12"></div>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 z-10 relative">
             <div className="flex items-start gap-3">
-              <span className="text-3xl bg-white/20 p-2.5 rounded-2xl shrink-0">⏳</span>
+              <span className="text-3xl bg-white/20 p-2.5 rounded-2xl shrink-0">🎓</span>
               <div>
-                <h3 className="text-lg md:text-xl font-extrabold text-white flex items-center gap-1.5 leading-tight">
-                  La Répétition Espacée (Méthode des J) • Cerveau d'Élite 🎓⚡
+                <h3 className="text-lg md:text-xl font-black text-white flex items-center gap-1.5 leading-tight">
+                  Espace Planning & Méthode des J • Mathilde Élite Club ⚡
                 </h3>
-                <p className="text-xs text-white/90 mt-1 max-w-3xl leading-relaxed">
-                  Luttez scientifiquement contre la <strong>courbe de l'oubli</strong>. En révisant à intervalles progressifs (<strong>J0 &rarr; J+3 &rarr; J+7 &rarr; J+14 &rarr; J+30 &rarr; J+60 &rarr; J+90</strong>), l'information s'ancre à vie dans votre mémoire à long terme.
+                <p className="text-xs text-white/95 mt-1 max-w-3xl leading-relaxed">
+                  Consultez votre <strong>calendrier d'échéance des rappels</strong> et visualisez l'historique de vos réussites par date. En validant vos fiches, vous ancrez l'information de manière définitive dans votre mémoire à long terme.
                 </p>
               </div>
+            </div>
+            <div className="flex items-center gap-2 bg-black/15 p-2 rounded-2xl border border-white/10 text-xs text-white/90 font-bold self-start md:self-auto uppercase tracking-wider shrink-0">
+              <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse"></span>
+              <span>{completedHistory.length} Fiches Validées</span>
             </div>
           </div>
         </div>
 
-        {/* TODAY'S DUE REVISIONS */}
-        {dueToday.length > 0 ? (
-          <div className="bg-pink-50 border-2 border-pink-400 p-5 rounded-3xl shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/[0.03] rounded-full pointer-events-none"></div>
+        {/* SUBVIEW SWITCHER TABS CONTAINER */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={() => setPlanningSubView('calendar')}
+              className={`flex-1 sm:flex-none p-2.5 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                planningSubView === 'calendar'
+                  ? 'bg-gradient-to-r from-pink-550 to-orange-500 text-white shadow-md shadow-pink-500/10'
+                  : 'bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+              Calendrier Global des Rappels
+            </button>
+            <button
+              onClick={() => setPlanningSubView('history')}
+              className={`flex-1 sm:flex-none p-2.5 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                planningSubView === 'history'
+                  ? 'bg-gradient-to-r from-pink-550 to-orange-500 text-white shadow-md shadow-pink-500/10'
+                  : 'bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <span className="text-sm">📜</span>
+              Historique Complet d'Étude ({completedHistory.length})
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-400 font-mono font-bold uppercase select-none hidden md:block">
+            📅 Agenda & Chronologie en temps réel
+          </p>
+        </div>
+
+        {/* TODAY'S ALERTS BAR */}
+        {dueToday.length > 0 && planningSubView === 'calendar' && (
+          <div className="bg-gradient-to-r from-pink-50 to-rose-50 border-2 border-pink-200 p-5 rounded-3xl shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/[0.02] rounded-full pointer-events-none"></div>
             <div className="flex items-center gap-2 mb-3">
               <span className="w-2.5 h-2.5 bg-pink-600 rounded-full animate-ping shrink-0"></span>
-              <h4 className="font-black text-pink-700 uppercase tracking-wider text-xs sm:text-sm">
-                🚨 EXERCICES À REVOIR AUJOURD'HUI :
+              <h4 className="font-black text-pink-700 uppercase tracking-widest text-xs sm:text-sm">
+                🚨 EXERCICES À REVOIR AUJOURD'HUI ({dueToday.length}) :
               </h4>
             </div>
 
@@ -1409,11 +1707,11 @@ export default function App() {
                 return (
                   <div 
                     key={`${occ.id}-${occ.label}-${idx}`}
-                    className="bg-white p-3.5 rounded-2xl border border-pink-205 shadow-sm flex items-center justify-between gap-3 hover:border-pink-300 transition-all duration-300"
+                    className="bg-white p-3.5 rounded-2xl border border-pink-100 shadow-sm flex items-center justify-between gap-3 hover:border-pink-300 transition-all duration-300 hover:shadow-md"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-1.5 py-0.5 bg-pink-100 text-pink-700 font-extrabold text-[8.5px] rounded border border-pink-200 uppercase tracking-widest leading-none">
+                        <span className="px-1.5 py-0.5 bg-pink-100 text-pink-700 font-black text-[9px] rounded border border-pink-200 uppercase tracking-widest leading-none">
                           {occ.label}
                         </span>
                         <span className="text-[9px] font-bold text-slate-400 font-mono">Fiche #{occ.ficheId}</span>
@@ -1422,7 +1720,7 @@ export default function App() {
                         {occ.ficheTitle}
                       </p>
                       <p className="text-[9.5px] text-slate-400 mt-0.5 font-mono">
-                        Rappel fixé à : {formatFriendlyDate(occ.dateStr)}
+                        Date de relance : {formatFriendlyDate(occ.dateStr)}
                       </p>
                     </div>
 
@@ -1450,7 +1748,7 @@ export default function App() {
                             }
                             triggerToast("Lancement du support de révision !", "info");
                           }}
-                          className="p-1 px-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[10px] font-bold transition-all shadow-sm"
+                          className="p-1 px-2.5 bg-slate-950 hover:bg-slate-800 text-white rounded-lg text-[10px] font-black transition-all shadow-sm"
                         >
                           👁️ Étudier
                         </button>
@@ -1467,161 +1765,500 @@ export default function App() {
               })}
             </div>
           </div>
-        ) : (
-          <div className="bg-emerald-50 border border-emerald-150 p-4 rounded-3xl text-emerald-800 text-xs md:text-sm flex items-center gap-2.5 animate-fadeIn">
-            <span className="text-xl">🎉</span>
-            <div>
-              <span className="font-black text-emerald-900">Tout est sous contrôle Mathilde !</span> Aucune fiche n'est obligatoire d'urgence aujourd'hui.
-            </div>
-          </div>
         )}
 
-        {/* CHRONOLOGICAL LIST & COURSE GROUPINGS */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          
-          <div className="lg:col-span-7 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm">
-            <h4 className="font-black text-slate-800 text-xs uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-slate-100 pb-2.5">
-              📅 Agenda chronologique des fiches ({upcoming.length} rappels programmés)
-            </h4>
+        {/* SUBVIEW 1: DETAILED INTERACTIVE CALENDAR VIEW */}
+        {planningSubView === 'calendar' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            {/* Interactive Monthly Grid */}
+            <div className="lg:col-span-7 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
+              
+              {/* Header Controller */}
+              <div className="flex items-center justify-between mb-5 select-none">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-pink-500 uppercase font-mono tracking-widest">
+                    Consultation des Échéances
+                  </span>
+                  <h4 className="text-lg font-black text-slate-900 mt-0.5">
+                    {monthNamesFr[month]} {year}
+                  </h4>
+                </div>
 
-            {upcoming.length === 0 ? (
-              <div className="text-center py-10 text-slate-400 text-xs italic bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                Aucun rappel planifié. Utilisez le bouton "Rappels 📅" sur les cartes de cours pour en programmer !
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  <button
+                    onClick={previousMonth}
+                    className="p-1.5 hover:bg-white rounded-lg text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
+                    title="Mois Précédent"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setCalendarDate(new Date(2026, 5, 1))}
+                    className="px-2 py-1 text-[10px] font-bold text-slate-500 hover:bg-white rounded-lg hover:text-slate-800 transition-all cursor-pointer font-mono"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    onClick={nextMonth}
+                    className="p-1.5 hover:bg-white rounded-lg text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
+                    title="Mois Suivant"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {upcoming.slice(0, 15).map((occ, idx) => {
-                  const associatedFiche = fiches.find(f => f.id === occ.ficheId);
-                  const isPastAndOverdue = occ.dateStr < todayStr;
+
+              {/* Weekdays row */}
+              <div className="grid grid-cols-7 gap-1 text-center font-bold text-slate-400 text-[11px] uppercase tracking-wider mb-2 border-b border-slate-100 pb-2">
+                {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(dayName => (
+                  <div key={dayName} className="py-1">{dayName}</div>
+                ))}
+              </div>
+
+              {/* 42-cell matrix rows */}
+              <div className="grid grid-cols-7 gap-1.5">
+                {cells.map((cell, idx) => {
+                  const hasDueReminders = allOccurrences.filter(occ => !occ.completed && occ.dateStr.startsWith(cell.dateStr));
+                  const hasDoneOccurrences = allOccurrences.filter(occ => occ.completed && occ.dateStr.startsWith(cell.dateStr));
+                  const hasCompletions = completedHistory.filter(h => h.completedDate === cell.dateStr);
+
+                  const isSelected = selectedCalendarDay === cell.dateStr;
+
                   return (
-                    <div 
-                      key={`${occ.id}-${occ.label}-up-${idx}`}
-                      className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
-                        isPastAndOverdue 
-                          ? 'bg-rose-50/40 border-rose-100 hover:border-rose-200 animate-pulse-subtle' 
-                          : 'bg-slate-50/50 border-slate-200 hover:border-slate-300'
+                    <div
+                      key={`${cell.dateStr}-${idx}`}
+                      onClick={() => setSelectedCalendarDay(cell.dateStr)}
+                      className={`min-h-[72px] p-1.5 rounded-2xl border flex flex-col justify-between transition-all cursor-pointer relative select-none ${
+                        !cell.isCurrentMonth
+                          ? 'bg-slate-50/50 border-slate-100 text-slate-350 opacity-40'
+                          : cell.isToday
+                          ? 'bg-blue-50/30 border-blue-200 text-slate-900 shadow-sm shadow-blue-500/5'
+                          : isSelected
+                          ? 'bg-pink-50 border-pink-400 text-pink-905 ring-2 ring-pink-500/15'
+                          : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50/50 hover:border-slate-300'
                       }`}
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`px-1.5 py-0.5 font-bold text-[8px] rounded uppercase tracking-wider leading-none ${
-                            occ.label.includes('J+') ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-705'
-                          }`}>
-                            {occ.label}
-                          </span>
-                          <span className="text-[9px] font-bold text-slate-405 font-mono">Fiche #{occ.ficheId}</span>
-                          {isPastAndOverdue && (
-                            <span className="text-[8px] font-mono bg-rose-200 text-rose-700 px-1 py-0.5 rounded font-black uppercase tracking-wider">RETARD ⏳</span>
-                          )}
-                        </div>
-                        <p className="font-bold text-slate-800 text-xs mt-1 truncate">
-                          {occ.ficheTitle}
-                        </p>
-                        <p className="text-[9px] text-slate-400 font-mono mt-0.5">
-                          Date : {formatFriendlyDate(occ.dateStr)}
-                        </p>
+                      {/* Day Number and current markers */}
+                      <div className="flex items-center justify-between gap-0.5">
+                        <span className={`text-[11px] font-black w-6 h-6 flex items-center justify-center rounded-full leading-none transition-all ${
+                          cell.isToday
+                            ? 'bg-blue-600 text-white font-extrabold'
+                            : isSelected
+                            ? 'bg-pink-600 text-white font-extrabold'
+                            : 'text-slate-800'
+                        }`}>
+                          {cell.dayNum}
+                        </span>
+
+                        {/* Quick Dot Indicator */}
+                        {cell.isToday && !isSelected && (
+                          <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-1 shrink-0">
-                        {associatedFiche && (
-                          <button
-                            onClick={() => {
-                              const audioUrl = activeZone === 'A' ? associatedFiche.audio1 : activeZone === 'B' ? associatedFiche.audio2 : associatedFiche.audio3;
-                              if (audioUrl) {
-                                setSelectedResourceForPreview({
-                                  title: associatedFiche.title,
-                                  resourceName: `Audio d’Étude #${associatedFiche.id}`,
-                                  url: audioUrl,
-                                  type: 'audio',
-                                  ficheId: associatedFiche.id
-                                });
-                              } else if (associatedFiche.coursFile) {
-                                setSelectedResourceForPreview({
-                                  title: associatedFiche.title,
-                                  resourceName: associatedFiche.coursFile,
-                                  url: associatedFiche.coursFileUrl || associatedFiche.coursFile,
-                                  type: 'slide',
-                                  ficheId: associatedFiche.id
-                                });
-                              }
-                            }}
-                            className="p-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[9.5px] font-bold transition-all"
-                          >
-                            👁️ Lire
-                          </button>
+                      {/* Micro visual bullets list of contents inside the cell */}
+                      <div className="mt-1 flex flex-col gap-0.5 max-h-[44px] overflow-hidden leading-none">
+                        
+                        {/* Due Reminders bar */}
+                        {hasDueReminders.length > 0 && (
+                          <div className="px-1 py-0.5 bg-orange-100 text-orange-850 text-[8px] font-black rounded border border-orange-200 shrink-0 flex items-center justify-between">
+                            <span>⏳ Due</span>
+                            <span className="bg-orange-600 text-white w-3 h-3 flex items-center justify-center rounded-full text-[7.5px] scale-90">{hasDueReminders.length}</span>
+                          </div>
                         )}
-                        <button
-                          onClick={() => toggleOccCompleted(occ.id, occ.label)}
-                          className="p-1 px-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-[9.5px] font-bold transition-all cursor-pointer shadow-sm"
-                        >
-                          ✔ Fait
-                        </button>
+
+                        {/* Completely Learned / Completed items marker */}
+                        {hasCompletions.length > 0 && (
+                          <div className="px-1 py-0.5 bg-emerald-100 text-emerald-850 text-[8px] font-black rounded border border-emerald-250 shrink-0 flex items-center justify-center gap-0.5">
+                            <span className="text-[7.5px]">✔</span>
+                            <span>{hasCompletions.length} Fait</span>
+                          </div>
+                        )}
+
+                        {/* Done Reminders */}
+                        {hasDueReminders.length === 0 && hasDoneOccurrences.length > 0 && (
+                          <div className="text-[7px] text-slate-400 font-mono text-center flex items-center justify-center py-0.5 gap-0.5 bg-slate-100 rounded border border-slate-200 uppercase tracking-widest font-bold">
+                            <span>✔ Rép</span>
+                          </div>
+                        )}
+                        
                       </div>
                     </div>
                   );
                 })}
               </div>
-            )}
-          </div>
 
-          <div className="lg:col-span-5 flex flex-col gap-6">
-            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm">
-              <h4 className="font-black text-slate-800 text-xs uppercase tracking-widest mb-3.5 flex items-center gap-2 border-b border-slate-100 pb-2.5">
-                🎒 Progression par Cours ({reminders.length} cours)
-              </h4>
-
-              {reminders.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-xs italic">
-                  Aucun cours planifié pour le moment.
+              {/* Legends Row */}
+              <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-center flex-wrap gap-4 text-[10px] text-slate-500 select-none">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded bg-blue-600"></span>
+                  <span>Aujourd'hui</span>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {reminders.map((r, idx) => (
-                    <div 
-                      key={`rem-card-${r.id}-${idx}`}
-                      className="p-3 bg-slate-50 rounded-2xl border border-slate-200 relative overflow-hidden flex flex-col gap-2"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[9px] text-pink-500 font-extrabold uppercase font-mono tracking-wider">
-                            {r.topic}
-                          </p>
-                          <h5 className="text-[11px] font-extrabold text-slate-900 leading-snug mt-0.5">
-                            {r.ficheTitle}
-                          </h5>
-                        </div>
-                        <button
-                          onClick={() => deleteReminderGroup(r.id)}
-                          className="text-[10px] text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-all font-bold"
-                        >
-                          ✕
-                        </button>
-                      </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-5 rounded border border-pink-400 bg-pink-50"></span>
+                  <span>Sélectionné</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="p-0.5 px-1 bg-orange-100 text-orange-700 border border-orange-200 rounded text-[7.5px] font-bold">⏳ Due</span>
+                  <span>Rappel de fiche imminent</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="p-0.5 px-1 bg-emerald-100 text-emerald-700 border border-emerald-255 rounded text-[7.5px] font-bold">✔ OK</span>
+                  <span>Fiche validée ("Fait")</span>
+                </div>
+              </div>
 
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-slate-200/60">
-                        {r.scheduledDates.map((occ, oIdx) => (
-                          <span 
-                            key={`${occ.label}-${oIdx}`}
-                            onClick={() => toggleOccCompleted(r.id, occ.label)}
-                            className={`px-1.5 py-0.5 text-[8.5px] font-extrabold rounded-md cursor-pointer select-none transition-all flex items-center gap-0.5 border ${
-                              occ.completed 
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
-                                : 'bg-slate-200 text-slate-600 border-slate-300 hover:bg-slate-300'
-                            }`}
-                          >
-                            <span>{occ.completed ? '✔' : '⏳'}</span>
-                            <span>{occ.label}</span>
-                          </span>
-                        ))}
-                      </div>
+            </div>
+
+            {/* Date Detail Panel */}
+            <div className="lg:col-span-5 flex flex-col gap-5">
+              
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="border-b border-slate-100 pb-3 mb-4">
+                    <span className="text-[9.5px] font-extrabold text-pink-500 uppercase font-mono tracking-wider">
+                      Événements du Jour Sélectionné
+                    </span>
+                    <h5 className="text-sm font-extrabold text-slate-900 mt-1 capitalize">
+                      📍 {formatDayLabelFr(selectedCalendarDay)}
+                    </h5>
+                  </div>
+
+                  {/* Scheduled Reminders list */}
+                  <div className="space-y-4">
+                    <div>
+                      <h6 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 font-mono">
+                        ⏰ Rappels Programmés ({selectedDayOccurrences.length})
+                      </h6>
+                      
+                      {selectedDayOccurrences.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 italic bg-slate-50 p-2.5 rounded-xl border border-dashed border-slate-150">
+                          Aucune séance de révision planifiée pour ce jour.
+                        </p>
+                      ) : (
+                        <div className="flex flex-col gap-2.5">
+                          {selectedDayOccurrences.map((occ, oIdx) => {
+                            const associatedFiche = fiches.find(f => f.id === occ.ficheId);
+                            return (
+                              <div key={`${occ.id}-${oIdx}`} className="p-3 bg-slate-50/80 border border-slate-200 rounded-xl flex items-center justify-between gap-2 hover:border-slate-350 transition-all">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`px-1 py-0.5 font-extrabold text-[8px] rounded uppercase tracking-wider leading-none ${
+                                      occ.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-pink-100 text-pink-700'
+                                    }`}>
+                                      {occ.label} {occ.completed ? '✔' : ''}
+                                    </span>
+                                    <span className="text-[8px] font-bold text-slate-400 font-mono">Fiche #{occ.ficheId}</span>
+                                  </div>
+                                  <p className="text-xs font-extrabold text-slate-900 mt-1 truncate">
+                                    {occ.ficheTitle}
+                                  </p>
+                                  <p className="text-[9px] text-slate-400 font-mono mt-0.5">
+                                    {occ.topic}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {associatedFiche && (
+                                    <button
+                                      onClick={() => {
+                                        const audioUrl = activeZone === 'A' ? associatedFiche.audio1 : activeZone === 'B' ? associatedFiche.audio2 : associatedFiche.audio3;
+                                        if (audioUrl) {
+                                          setSelectedResourceForPreview({
+                                            title: associatedFiche.title,
+                                            resourceName: `Audio d’Étude #${associatedFiche.id}`,
+                                            url: audioUrl,
+                                            type: 'audio',
+                                            ficheId: associatedFiche.id
+                                          });
+                                        } else if (associatedFiche.coursFile) {
+                                          setSelectedResourceForPreview({
+                                            title: associatedFiche.title,
+                                            resourceName: associatedFiche.coursFile,
+                                            url: associatedFiche.coursFileUrl || associatedFiche.coursFile,
+                                            type: 'slide',
+                                            ficheId: associatedFiche.id
+                                          });
+                                        }
+                                        triggerToast("Lancement de l'étude !", "info");
+                                      }}
+                                      className="p-1 px-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded text-[8.5px] font-black transition-all"
+                                      title="Lancer le support"
+                                    >
+                                      👁️
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => toggleOccCompleted(occ.id, occ.label)}
+                                    className={`p-1 px-1.5 rounded text-[8.5px] font-extrabold cursor-pointer transition-all border ${
+                                      occ.completed
+                                        ? 'bg-emerald-100 text-emerald-800 border-emerald-250 hover:bg-emerald-200'
+                                        : 'bg-white text-slate-500 border-slate-300 hover:bg-pink-600 hover:text-white hover:border-transparent font-black'
+                                    }`}
+                                    title={occ.completed ? "Remarquer comme non-fait" : "Marquer comme révisé pour ce J"}
+                                  >
+                                    ✔
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
+
+                    {/* Studied History of that day list */}
+                    <div>
+                      <h6 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 font-mono">
+                        🏆 Cours Validés à cette Date ({selectedDayCompletions.length})
+                      </h6>
+                      
+                      {selectedDayCompletions.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 italic bg-slate-50 p-2.5 rounded-xl border border-dashed border-slate-150">
+                          Aucun cours validé ce jour-là.
+                        </p>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {selectedDayCompletions.map((comp, idx) => (
+                            <div key={`${comp.ficheId}-${idx}`} className="p-2.5 bg-emerald-500/[0.02] border border-emerald-500/15 rounded-xl flex items-center justify-between gap-1.5">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span className={`px-1 py-0.5 text-[7.5px] font-black rounded-md uppercase tracking-wider ${
+                                    comp.zone === 'Zone A' ? 'bg-blue-100 text-blue-700' : comp.zone === 'Zone B' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+                                  }`}>
+                                    {comp.zone}
+                                  </span>
+                                  <span className="text-[8px] font-mono text-slate-400 font-bold">Fiche #{comp.ficheId}</span>
+                                </div>
+                                <p className="text-[11.5px] font-extrabold text-slate-800 mt-1 truncate">
+                                  {comp.title}
+                                </p>
+                              </div>
+
+                              <button
+                                onClick={() => {
+                                  const associated = fiches.find(f => f.id === comp.ficheId);
+                                  if (associated) {
+                                    const audioUrl = comp.zone === 'Zone A' ? associated.audio1 : comp.zone === 'Zone B' ? associated.audio2 : associated.audio3;
+                                    if (audioUrl) {
+                                      setSelectedResourceForPreview({
+                                        title: associated.title,
+                                        resourceName: `Support #${associated.id}`,
+                                        url: audioUrl,
+                                        type: 'audio',
+                                        ficheId: associated.id
+                                      });
+                                    } else if (associated.coursFile) {
+                                      setSelectedResourceForPreview({
+                                        title: associated.title,
+                                        resourceName: associated.coursFile,
+                                        url: associated.coursFileUrl || associated.coursFile,
+                                        type: 'slide',
+                                        ficheId: associated.id
+                                      });
+                                    }
+                                    triggerToast("Relance du support d'étude !", "info");
+                                  }
+                                }}
+                                className="p-1 px-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[8px] font-extrabold transition-all shrink-0"
+                              >
+                                Écouter 🔊
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+
+                <div className="mt-5 pt-3.5 border-t border-slate-100 text-slate-400 text-[10px] leading-relaxed italic text-center">
+                  💡 Cliquez sur n'importe quel jour du calendrier pour consulter en direct toutes ses échéances.
+                </div>
+              </div>
+
+              {/* Progress summary block */}
+              <div className="bg-slate-900 text-white p-5 rounded-3xl border border-slate-800 shadow-sm">
+                <span className="text-[9px] text-pink-500 font-black uppercase tracking-widest font-mono">
+                  SÉANCES D’ÉVALUATIONS EN COURS
+                </span>
+                <h5 className="text-[13px] font-extrabold text-slate-250 mt-1 leading-snug">
+                  Total des Fiches Programmées : {reminders.length} Modules
+                </h5>
+
+                <div className="mt-4 space-y-3">
+                  {reminders.slice(0, 3).map((r, rIdx) => {
+                    const dones = r.scheduledDates.filter(o => o.completed).length;
+                    const totalD = r.scheduledDates.length;
+                    const percent = Math.round((dones / totalD) * 100) || 0;
+
+                    return (
+                      <div key={r.id + rIdx} className="bg-white/5 p-2 rounded-xl border border-white/10 text-xs">
+                        <div className="flex items-center justify-between font-bold">
+                          <span className="truncate text-[11px] text-slate-205">{r.ficheTitle}</span>
+                          <span className="text-pink-400 text-[10.5px] shrink-0 font-mono">{dones}/{totalD}</span>
+                        </div>
+                        <div className="w-full bg-slate-800 rounded-full h-1.5 mt-1.5">
+                          <div className="bg-gradient-to-r from-pink-500 to-orange-550 h-full rounded-full" style={{ width: `${percent}%` }}></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {reminders.length > 3 && (
+                    <p className="text-[9px] text-slate-450 italic text-center text-slate-400 pt-1">
+                      + {reminders.length - 3} autres cours en répétition active...
+                    </p>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* SUBVIEW 2: FULL STUDY AND COMPLETIONS TIMELINE */}
+        {planningSubView === 'history' && (
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm animate-fadeIn">
+            
+            {/* Filtering Control Row */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-100">
+              <div className="flex-1 max-w-sm">
+                <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                  Rechercher un cours validé:
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Filtrer par titre, bloc ou sujet..."
+                    value={planningHistorySearch}
+                    onChange={(e) => setPlanningHistorySearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-pink-500"
+                  />
+                </div>
+              </div>
+
+              {/* Zone selectors */}
+              <div className="flex flex-col gap-1 shrink-0">
+                <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                  Filtrer par Zone d'Étude:
+                </label>
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  {(['all', 'A', 'B', 'C'] as const).map(zoneKey => (
+                    <button
+                      key={zoneKey}
+                      onClick={() => setPlanningHistoryZone(zoneKey)}
+                      className={`px-3 py-1 text-[10.5px] font-black rounded-lg transition-all cursor-pointer uppercase ${
+                        planningHistoryZone === zoneKey
+                          ? zoneKey === 'A'
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : zoneKey === 'B'
+                            ? 'bg-red-500 text-white shadow-sm'
+                            : zoneKey === 'C'
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-slate-800 text-white shadow-sm'
+                          : 'text-slate-500 hover:bg-white hover:text-slate-800'
+                      }`}
+                    >
+                      {zoneKey === 'all' ? 'Toutes' : `Zone ${zoneKey}`}
+                    </button>
                   ))}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
 
-        </div>
+            {/* Timeline Results List */}
+            {filteredHistory.length === 0 ? (
+              <div className="text-center py-16 text-slate-400 italic bg-slate-50 border border-dashed border-slate-200 rounded-2xl">
+                <span className="text-3xl block">📋</span>
+                <p className="text-xs font-black text-slate-600 mt-2">Aucun historique correspondant à vos critères.</p>
+                <p className="text-[11px] text-slate-450 mt-1">Validez des cours dans la Zone A, B ou C pour alimenter ce rapport d'évènements.</p>
+              </div>
+            ) : (
+              <div className="relative border-l-2 border-slate-200 pl-4 ml-2 space-y-4 py-2">
+                {filteredHistory.map((item, idx) => {
+                  const associated = fiches.find(f => f.id === item.ficheId);
+                  return (
+                    <div key={`${item.ficheId}-${item.zone}-${idx}`} className="relative group animate-fadeIn">
+                      
+                      {/* Interactive visual bullet node */}
+                      <span className={`absolute -left-[23px] top-1.5 w-2.5 h-2.5 rounded-full ring-4 ring-white transition-transform group-hover:scale-120 ${
+                        item.zone === 'Zone A' ? 'bg-blue-600' : item.zone === 'Zone B' ? 'bg-red-500' : 'bg-emerald-600'
+                      }`}></span>
+
+                      <div className="p-3.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors hover:border-slate-350">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-extrabold text-[10px] text-slate-500">
+                              📅 {item.originalDateStr}
+                            </span>
+                            <span className={`px-1.5 py-0.5 text-[8px] font-black rounded uppercase tracking-wider ${
+                              item.zone === 'Zone A' 
+                                ? 'bg-blue-105 text-blue-700' 
+                                : item.zone === 'Zone B' 
+                                ? 'bg-red-105 text-red-700' 
+                                : 'bg-emerald-105 text-emerald-700'
+                            }`}>
+                              {item.zone === 'Zone A' ? 'Zone A • Évaluation' : item.zone === 'Zone B' ? 'Zone B • Jury' : 'Zone C • Commun'}
+                            </span>
+                            <span className="text-[8.5px] font-bold text-slate-400 font-mono">
+                              {item.block} • Fiche #{item.ficheId}
+                            </span>
+                          </div>
+
+                          <h5 className="font-extrabold text-slate-900 text-xs sm:text-sm mt-1 group-hover:text-pink-600 transition-colors">
+                            {item.title}
+                          </h5>
+                          <p className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                            Thème du cours : {item.topic}
+                          </p>
+                        </div>
+
+                        {associated && (
+                          <button
+                            onClick={() => {
+                              const audioUrl = item.zone === 'Zone A' ? associated.audio1 : item.zone === 'Zone B' ? associated.audio2 : associated.audio3;
+                              if (audioUrl) {
+                                setSelectedResourceForPreview({
+                                  title: associated.title,
+                                  resourceName: `Support #${associated.id}`,
+                                  url: audioUrl,
+                                  type: 'audio',
+                                  ficheId: associated.id
+                                });
+                              } else if (associated.coursFile) {
+                                setSelectedResourceForPreview({
+                                  title: associated.title,
+                                  resourceName: associated.coursFile,
+                                  url: associated.coursFileUrl || associated.coursFile,
+                                  type: 'slide',
+                                  ficheId: associated.id
+                                });
+                              }
+                              triggerToast("Lancement de l'étude !", "info");
+                            }}
+                            className="self-start sm:self-auto p-1.5 px-3.5 bg-white border border-slate-300 hover:border-slate-400 text-slate-700 hover:text-slate-900 rounded-xl text-[10px] font-extrabold transition-all shadow-sm flex items-center gap-1 shrink-0"
+                          >
+                            <span>👁️ Revisiter</span>
+                          </button>
+                        )}
+                      </div>
+
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="bg-slate-50 p-3 rounded-xl text-center text-[10px] text-slate-400 mt-5 border border-slate-100 select-none">
+              ⏳ Les dates d'enregistrement correspondent à l'heure à laquelle vous basculez l'état d'avancement d'un cours en "Fait" dans les zones respectives.
+            </div>
+
+          </div>
+        )}
 
       </div>
     );
@@ -2374,10 +3011,7 @@ export default function App() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => setAmbientSounds(prev => ({
-                            ...prev,
-                            [sound.key]: { ...prev[sound.key], playing: !prev[sound.key].playing }
-                          }))}
+                          onClick={() => handleToggleAmbientSound(sound.key)}
                           className={`p-1 px-2 text-[9px] font-black rounded-lg transition-all border shrink-0 cursor-pointer uppercase ${
                             state?.playing 
                               ? 'bg-gradient-to-r from-pink-500 to-orange-500 text-white border-transparent shadow shadow-pink-600/30' 
@@ -3478,7 +4112,7 @@ export default function App() {
                             <span className="text-blue-400 font-mono text-[10px] bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 uppercase font-black">
                               LECTEUR DIRECT 📄
                             </span>
-                            <span className="font-extrabold text-slate-200 truncate max-w-[200px] sm:max-w-xs md:max-w-md">
+                            <span className="font-extrabold text-slate-200 text-xs md:text-sm line-clamp-2 max-w-[180px] sm:max-w-xs md:max-w-md break-words whitespace-normal leading-tight block">
                               {selectedResourceForPreview.resourceName}
                             </span>
                           </div>
@@ -3515,33 +4149,72 @@ export default function App() {
                         </div>
 
                         {/* Display content inside card */}
-                        {getDriveEmbedUrl(selectedResourceForPreview.url) ? (
-                          <div className={`w-full relative rounded-xl overflow-hidden bg-slate-905 border border-slate-800 transition-all duration-300 ${
-                            previewHeight === 'compact' ? 'h-[280px]' : 'h-[550px]'
-                          }`}>
-                            <iframe 
-                              src={getDriveEmbedUrl(selectedResourceForPreview.url) || undefined} 
-                              className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
-                              allow="autoplay; encrypted-media"
-                              title="In-App Preview"
-                            />
-                          </div>
-                        ) : (
-                          <div className="p-8 text-center text-slate-300 bg-slate-900 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
-                            <span className="text-3xl mb-2">⚠️</span>
-                            <h5 className="font-bold text-sm text-slate-100">Intégration directe non supportée</h5>
-                            <p className="text-xs text-slate-400 mt-1 max-w-sm">Ce fichier requiert une authentification externe ou une extension de sécurité.</p>
-                            <a 
-                              href={selectedResourceForPreview.url} 
-                              target="_blank" 
-                              referrerPolicy="no-referrer"
-                              rel="noopener noreferrer" 
-                              className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow"
-                            >
-                              Ouvrir dans un nouvel onglet externe <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          </div>
-                        )}
+                        {(() => {
+                          const url = selectedResourceForPreview.url;
+                          const ytEmbed = getYoutubeEmbedUrl(url);
+                          const isDirectVideo = isDirectVideoUrl(url) || selectedResourceForPreview.type === 'video';
+                          const driveEmbed = getDriveEmbedUrl(url);
+
+                          const containerHeight = previewHeight === 'compact' ? 'h-[280px]' : 'h-[550px]';
+
+                          if (isDirectVideo) {
+                            return (
+                              <div className={`w-full relative rounded-xl overflow-hidden bg-black border border-slate-800 transition-all duration-300 ${containerHeight}`}>
+                                <video 
+                                  src={url} 
+                                  className="w-full h-full max-h-full rounded-xl bg-black object-contain" 
+                                  controls 
+                                  autoPlay 
+                                  playsInline
+                                />
+                              </div>
+                            );
+                          }
+
+                          if (ytEmbed) {
+                            return (
+                              <div className={`w-full relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 transition-all duration-300 ${containerHeight}`}>
+                                <iframe 
+                                  src={ytEmbed} 
+                                  className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
+                                  allow="autoplay; encrypted-media; picture-in-picture"
+                                  allowFullScreen
+                                  title="YouTube Video Preview"
+                                />
+                              </div>
+                            );
+                          }
+
+                          if (driveEmbed) {
+                            return (
+                              <div className={`w-full relative rounded-xl overflow-hidden bg-slate-905 border border-slate-800 transition-all duration-300 ${containerHeight}`}>
+                                <iframe 
+                                  src={driveEmbed} 
+                                  className="w-full h-full border-0 absolute top-0 left-0 bg-slate-900" 
+                                  allow="autoplay; encrypted-media"
+                                  title="In-App Preview"
+                                />
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="p-8 text-center text-slate-300 bg-slate-900 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
+                              <span className="text-3xl mb-2">⚠️</span>
+                              <h5 className="font-bold text-sm text-slate-100">Intégration directe non supportée</h5>
+                              <p className="text-xs text-slate-400 mt-1 max-w-sm">Ce fichier requiert une authentification externe ou une extension de sécurité.</p>
+                              <a 
+                                href={url} 
+                                target="_blank" 
+                                referrerPolicy="no-referrer"
+                                rel="noopener noreferrer" 
+                                className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow"
+                              >
+                                Ouvrir dans un nouvel onglet externe <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          );
+                        })()}
 
                         <div className="text-[10px] text-slate-400 italic">
                           💡 Lecture sécurisée dans l'application &bull; Prévient les redirections externes
