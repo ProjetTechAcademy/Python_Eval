@@ -227,6 +227,8 @@ export default function IntegratedAudioVisualPlayer({
                 <video 
                   src={`https://docs.google.com/uc?export=download&id=${getDriveFileId(selectedResourceForPreview.url)}`}
                   controls 
+                  controlsList="nodownload"
+                  onContextMenu={(e) => e.preventDefault()}
                   autoPlay
                   playsInline
                   className="w-full h-full object-contain max-h-[350px]"
@@ -360,6 +362,8 @@ export default function IntegratedAudioVisualPlayer({
                 <video 
                   src={`https://docs.google.com/uc?export=download&id=${getDriveFileId(currentCompanion.url)}`} 
                   controls 
+                  controlsList="nodownload"
+                  onContextMenu={(e) => e.preventDefault()}
                   playsInline
                   autoPlay
                   className="w-full flex-1 object-contain bg-black"
