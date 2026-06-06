@@ -1204,9 +1204,6 @@ export default function App() {
                           )}
                         </span>
                       </div>
-                      <span className="text-[8px] text-[#4285F4] bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md font-sans font-black uppercase shrink-0">
-                        Support PDF
-                      </span>
                     </div>
 
                     <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
@@ -4410,9 +4407,6 @@ export default function App() {
                             <div className="flex items-start justify-between text-[10px] gap-2">
                               <span className="font-bold text-slate-800 flex items-start gap-1 whitespace-normal break-all max-w-full leading-normal" title={fiche.coursFile}>
                                 📂 <span className="font-mono text-[10px] text-slate-700">{fiche.coursFile}</span>
-                              </span>
-                              <span className="text-[8px] text-[#4285F4] bg-blue-105 border border-blue-100 px-1.5 py-0.5 rounded-md font-sans font-black uppercase shrink-0">
-                                Support PDF
                               </span>
                             </div>
 
