@@ -8,8 +8,8 @@ export interface Fiche {
   motorsLink: string;
   date1?: string;
   date2?: string;
-  status1: FicheStatus;
-  status2: FicheStatus;
+  status1?: FicheStatus;
+  status2?: FicheStatus;
   coursFile: string;
   coursFileUrl?: string;
   
@@ -35,17 +35,40 @@ export interface Fiche {
   video3?: string;
   image3?: string;
   nblm3?: string;
+
+  // Zone D / Tab 4 resources (DWWM)
+  status4?: FicheStatus;
+  date4?: string;
+  audio4?: string;
+  slide4?: string;
+  video4?: string;
+  image4?: string;
+  nblm4?: string;
+
+  // Zone E / Tab 5 resources (Digital CDO & SDE)
+  status5?: FicheStatus;
+  date5?: string;
+  audio5?: string;
+  slide5?: string;
+  video5?: string;
+  image5?: string;
+  nblm5?: string;
+  info5?: string;
   
   // Common resources
   studi?: string;
   suivi1?: string;
   suivi2?: string;
   suivi3?: string;
+  suivi4?: string;
+  suivi5?: string;
 
   // Zone presence flags
   inZoneA?: boolean;
   inZoneB?: boolean;
   inZoneC?: boolean;
+  inZoneD?: boolean;
+  inZoneE?: boolean;
 }
 
 export interface MetricCardConfig {

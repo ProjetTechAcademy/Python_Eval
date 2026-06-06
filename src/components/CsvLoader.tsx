@@ -78,22 +78,28 @@ export const parseSingleTextToSheet = (text: string) => {
   }
 
   // Detect section
-  let section: 'eval0' | 'eval1' | 'eval2' = 'eval0';
-  for (let i = 0; i < Math.min(10, rows.length); i++) {
-    const lineJoined = rows[i].join(',');
-    if (lineJoined.includes('Python_Eval_1') || lineJoined.includes('audio_1') || lineJoined.includes('Audio_1')) {
+  let section: 'eval0' | 'eval1' | 'eval2' | 'dwwm' | 'digital' = 'eval0';
+  for (let i = 0; i < rows.length; i++) {
+    const lineJoined = rows[i].join(',').toLowerCase();
+    if (lineJoined.includes('python_eval_1') || lineJoined.includes('audio_1')) {
       section = 'eval1';
       break;
-    } else if (lineJoined.includes('Python_Eval_2') || lineJoined.includes('audio_2') || lineJoined.includes('Audio_2')) {
+    } else if (lineJoined.includes('python_eval_2') || lineJoined.includes('audio_2')) {
       section = 'eval2';
       break;
-    } else if (lineJoined.includes('Python_Eval_0') || lineJoined.includes('audio_0') || lineJoined.includes('Audio_0')) {
+    } else if (lineJoined.includes('python_eval_0') || lineJoined.includes('audio_0')) {
       section = 'eval0';
+      break;
+    } else if (lineJoined.includes('dwwm') || lineJoined.includes('dwwm_')) {
+      section = 'dwwm';
+      break;
+    } else if (lineJoined.includes('digital') || lineJoined.includes('cdo') || lineJoined.includes('sde') || lineJoined.includes('sd_') || lineJoined.includes('dgt') || lineJoined.includes('programme')) {
+      section = 'digital';
       break;
     }
   }
 
-  // Find headers row containing "titre" or typical ID tags
+  // Find headers row containing "titre", "programme", "sujet" or typical ID tags
   let headers: string[] = [];
   let headersIndex = -1;
   for (let i = 0; i < Math.min(15, rows.length); i++) {
@@ -102,7 +108,7 @@ export const parseSingleTextToSheet = (text: string) => {
     const firstCell = row[0].trim().toLowerCase();
     const hasTitre = row.some(cell => {
       const c = cell.trim().toLowerCase();
-      return c.includes('titre') || c.includes('title') || c.includes('fiche');
+      return c.includes('titre') || c.includes('title') || c.includes('fiche') || c.includes('programme') || c.includes('sujet');
     });
 
     const isHeaderStart = 
@@ -112,7 +118,9 @@ export const parseSingleTextToSheet = (text: string) => {
       firstCell === 'id' || 
       firstCell.startsWith('n°') || 
       firstCell.startsWith('num') || 
-      firstCell.startsWith('no');
+      firstCell.startsWith('no') ||
+      firstCell.startsWith('programme') ||
+      firstCell.startsWith('sujet');
 
     if (hasTitre || isHeaderStart) {
       headers = row.map(h => h.trim().toLowerCase());
@@ -130,6 +138,7 @@ export const parseSingleTextToSheet = (text: string) => {
     if (h.includes('_1') || h.includes('audio_1') || h.includes('slide_1')) section = 'eval1';
     if (h.includes('_2') || h.includes('audio_2') || h.includes('slide_2')) section = 'eval2';
     if (h.includes('_0') || h.includes('audio_0') || h.includes('slide_0')) section = 'eval0';
+    if (h === 'suivi' && headers.includes('nblm')) section = 'digital';
   });
 
   const records: Record<number, any> = {};
@@ -139,11 +148,25 @@ export const parseSingleTextToSheet = (text: string) => {
     if (row.length === 0 || !row[0]) continue;
 
     const firstCell = row[0].trim();
-    const idNum = parseInt(firstCell, 10);
+    let idNum = parseInt(firstCell, 10);
+    if (isNaN(idNum)) {
+      // Try to parse number from patterns like "001_DGT"
+      const matchNum = firstCell.match(/^(\d+)/);
+      if (matchNum) {
+        idNum = parseInt(matchNum[1], 10);
+      }
+    }
     if (isNaN(idNum)) continue;
 
+    // Map rows in digital and dwwm sections appropriately starting at base offset 1000/2000 if parsed index is small
+    const actualId = (section === 'digital' && idNum < 1000)
+      ? (2000 + idNum - 1)
+      : (section === 'dwwm' && idNum < 1000)
+        ? (1000 + idNum - 1)
+        : idNum;
+
     const record: any = {
-      id: idNum,
+      id: actualId,
       title: '',
       action: '',
       motorsLink: '',
@@ -156,7 +179,8 @@ export const parseSingleTextToSheet = (text: string) => {
       image: '',
       nblm: '',
       studi: '',
-      suivi: ''
+      suivi: '',
+      info: ''
     };
 
     headers.forEach((header, index) => {
@@ -164,9 +188,9 @@ export const parseSingleTextToSheet = (text: string) => {
       const val = row[index].trim();
       if (!val) return;
 
-      if (header.includes('titre')) {
+      if (header.includes('programme') || header.includes('titre') || header.includes('title') || header.includes('fiche') || header === 'sujet') {
         record.title = val;
-      } else if (header.includes('action')) {
+      } else if (header.includes('action') || header.includes('travail')) {
         record.action = val;
       } else if (header.includes('devoir') || header.includes('motors') || header.includes('lien direct')) {
         record.motorsLink = val;
@@ -181,7 +205,9 @@ export const parseSingleTextToSheet = (text: string) => {
         } else {
           record.status = 'A faire';
         }
-      } else if (header.includes('cours')) {
+      } else if (header === 'studi' || header.includes('studi') || (header === 'lien' && (section === 'digital' || section === 'dwwm'))) {
+        record.studi = val;
+      } else if (header === 'pdf' || (header.includes('pdf') && !header.includes('info')) || header.includes('cours')) {
         if (val.startsWith('http')) {
           record.coursFileUrl = val;
         } else {
@@ -193,12 +219,12 @@ export const parseSingleTextToSheet = (text: string) => {
         record.slide = val;
       } else if (header.includes('vidéo') || header.includes('video')) {
         record.video = val;
-      } else if (header.includes('image')) {
+      } else if (header.includes('image') || header.includes('schéma') || header.includes('schema')) {
         record.image = val;
-      } else if (header.includes('nblm')) {
+      } else if (header.includes('nblm') || header.includes('notebook')) {
         record.nblm = val;
-      } else if (header.includes('studi')) {
-        record.studi = val;
+      } else if (header.includes('info') || header.includes('doc')) {
+        record.info = val;
       } else if (header.includes('suivi')) {
         record.suivi = val;
       } else if (header.includes('lien') && !record.coursFileUrl && val.startsWith('http')) {
@@ -206,18 +232,32 @@ export const parseSingleTextToSheet = (text: string) => {
       }
     });
 
-    records[idNum] = record;
+    records[actualId] = record;
   }
 
   return { section, records };
 };
 
-export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; records: Record<number, any> }[], currentList: Fiche[]): Fiche[] => {
+export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2' | 'dwwm' | 'digital'; records: Record<number, any> }[], currentList: Fiche[]): Fiche[] => {
   const mergedMap: Record<number, Partial<Fiche>> = {};
+
+  const hasEval1 = sheets.some(s => s.section === 'eval1');
+  const hasEval2 = sheets.some(s => s.section === 'eval2');
+  const hasEval0 = sheets.some(s => s.section === 'eval0');
+  const hasDwwm = sheets.some(s => s.section === 'dwwm');
+  const hasDigital = sheets.some(s => s.section === 'digital');
 
   // First copy currentList's existing records to retain all user states/clicks/dates
   currentList.forEach(fiche => {
-    mergedMap[fiche.id] = { ...fiche };
+    mergedMap[fiche.id] = { 
+      ...fiche,
+      // Reset only if we are syncing that specific zone's sheet, to avoid losing state when updating other zones
+      inZoneA: hasEval1 ? false : fiche.inZoneA,
+      inZoneB: hasEval2 ? false : fiche.inZoneB,
+      inZoneC: hasEval0 ? false : fiche.inZoneC,
+      inZoneD: (hasDwwm || hasDigital) ? false : fiche.inZoneD,
+      inZoneE: false,
+    };
   });
 
   sheets.forEach(sheet => {
@@ -297,6 +337,27 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
         if (rec.image) m.image3 = rec.image;
         if (rec.nblm) m.nblm3 = rec.nblm;
         if (rec.suivi) m.suivi3 = rec.suivi;
+      } else if (section === 'dwwm') {
+        m.inZoneD = true;
+        m.status4 = (m.status4 && m.status4 !== 'A faire' && rec.status === 'A faire') ? m.status4 : rec.status;
+        if (rec.date) m.date4 = rec.date;
+        if (rec.audio) m.audio4 = rec.audio;
+        if (rec.slide) m.slide4 = rec.slide;
+        if (rec.video) m.video4 = rec.video;
+        if (rec.image) m.image4 = rec.image;
+        if (rec.nblm) m.nblm4 = rec.nblm;
+        if (rec.suivi) m.suivi4 = rec.suivi;
+      } else if (section === 'digital') {
+        m.inZoneD = true;
+        m.status5 = (m.status5 && m.status5 !== 'A faire' && rec.status === 'A faire') ? m.status5 : rec.status;
+        if (rec.date) m.date5 = rec.date;
+        if (rec.audio) m.audio5 = rec.audio;
+        if (rec.slide) m.slide5 = rec.slide;
+        if (rec.video) m.video5 = rec.video;
+        if (rec.image) m.image5 = rec.image;
+        if (rec.info) m.info5 = rec.info;
+        if (rec.nblm) m.nblm5 = rec.nblm;
+        if (rec.suivi) m.suivi5 = rec.suivi;
       }
     });
   });
@@ -312,6 +373,8 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
     
     // Default fallback zone memberships for common files of Bloc 3
     const isEvalFiche = EVAL_FICHES_IDS.has(id);
+    const isDwwm = id >= 1000 && id < 2000;
+    const isDigital = id >= 2000;
     
     const finalTitle = up.title || `Fiche #${id}`;
     const computedCoursFile = (up.coursFile && !up.coursFile.endsWith('_cours.pdf'))
@@ -321,12 +384,14 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
     const baseMerged = {
       id,
       title: finalTitle,
-      topic: up.topic || 'Autre',
-      action: up.action || '',
+      topic: isDigital ? 'Digital CDO & SD' : (isDwwm ? 'DWWM' : (up.topic || 'Autre')),
+      action: isDigital ? "Suivre le module d'apprentissage digital CDO & SD." : (isDwwm ? "Suivre le module d'apprentissage DWWM." : (up.action || '')),
       motorsLink: up.motorsLink || '',
       status1: up.status1 || 'A faire',
       status2: up.status2 || 'A faire',
       status3: up.status3 || 'A faire',
+      status4: up.status4 || 'A faire',
+      status5: up.status5 || 'A faire',
       coursFileUrl: up.coursFileUrl || '',
       ...up,
       coursFile: computedCoursFile
@@ -334,9 +399,11 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2'; reco
 
     return {
       ...baseMerged,
-      inZoneA: isEvalFiche ? (up.inZoneA !== undefined ? up.inZoneA : true) : false,
-      inZoneB: isEvalFiche ? (up.inZoneB !== undefined ? up.inZoneB : true) : false,
-      inZoneC: up.inZoneC !== undefined ? up.inZoneC : true,
+      inZoneA: isEvalFiche ? (up.inZoneA === true) : false,
+      inZoneB: isEvalFiche ? (up.inZoneB === true) : false,
+      inZoneC: (isDwwm || isDigital) ? false : (up.inZoneC === true),
+      inZoneD: (isDwwm || isDigital) ? true : false,
+      inZoneE: false,
     } as Fiche;
   });
 
@@ -358,9 +425,10 @@ export default function CsvLoader({ onDataLoaded, currentCount, currentList }: C
       const merged = mergeSheets([single], currentList || initialFiches);
       
       onDataLoaded(merged);
+      const zoneLetter = single.section === 'eval1' ? 'A' : single.section === 'eval2' ? 'B' : (single.section === 'dwwm' || single.section === 'digital') ? 'D' : 'C';
       setStatusMessage({
         type: 'success',
-        text: `Félicitations ! Fiche synchronisée avec succès ! (Zone: ${single.section === 'eval1' ? 'A' : single.section === 'eval2' ? 'B' : 'C'}) 🎉`
+        text: `Félicitations ! Fiche synchronisée avec succès ! (Zone: ${zoneLetter}) 🎉`
       });
       return true;
     } catch (e: any) {

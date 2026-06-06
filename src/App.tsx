@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initialFiches, EVAL_FICHES_IDS } from './data/initialData';
+import { dwwmFiches } from './data/dwwmFiches';
+import { digitalFiches } from './data/digitalFiches';
 import { Fiche, FicheStatus, ScheduledDate, Reminder } from './types';
 import ThreeDBox from './components/ThreeDBox';
 import ResourcePlayer from './components/ResourcePlayer';
@@ -111,6 +113,10 @@ function getTopicBadgeStyle(topic: string) {
       return 'bg-rose-500/10 text-rose-700 border-rose-500/20';
     case 'APIs, Git & Sécurité':
       return 'bg-cyan-500/10 text-cyan-750 border-cyan-500/20';
+    case 'DWWM':
+      return 'bg-violet-500/10 text-violet-750 border-violet-500/20';
+    case 'Digital CDO & SD':
+      return 'bg-pink-500/10 text-pink-700 border-pink-500/20';
     default:
       return 'bg-slate-100/80 text-slate-700 border-slate-205';
   }
@@ -130,9 +136,21 @@ function getTopicLeftBorder(topic: string) {
       return 'border-l-[6px] border-l-rose-500';
     case 'APIs, Git & Sécurité':
       return 'border-l-[6px] border-l-cyan-500';
+    case 'DWWM':
+      return 'border-l-[6px] border-l-violet-500';
+    case 'Digital CDO & SD':
+      return 'border-l-[6px] border-l-pink-500';
     default:
       return 'border-l-[6px] border-l-slate-400';
   }
+}
+
+function parseBlockAndModule(title: string) {
+  const bMatch = title.match(/(?:_|\b)B_?(\d+)(?:_|\b)/i);
+  const mMatch = title.match(/(?:_|\b)M_?(\d+)(?:_|\b)/i);
+  const bCode = bMatch ? `B${bMatch[1]}` : 'Autre';
+  const mCode = mMatch ? `M${mMatch[1]}` : 'Autre';
+  return { bCode, mCode, hasModule: !!mMatch };
 }
 
 export default function App() {
@@ -142,23 +160,45 @@ export default function App() {
     if (local) {
       try {
         list = JSON.parse(local);
+        // Robust merge: find and append any missing preset fiches by checking their id
+        const existingIds = new Set(list.map(f => f.id));
+        const missingDwwm = dwwmFiches.filter(f => !existingIds.has(f.id));
+        const missingDigital = digitalFiches.filter(f => !existingIds.has(f.id));
+        list = [...list, ...missingDwwm, ...missingDigital];
       } catch (e) {
-        list = initialFiches;
+        list = [...initialFiches, ...dwwmFiches, ...digitalFiches];
       }
+    } else {
+      list = [...initialFiches, ...dwwmFiches, ...digitalFiches];
     }
     return list.map(f => {
-      const isEvalFiche = EVAL_FICHES_IDS.has(f.id);
+      const isEvalFiche = f.id < 1000 && EVAL_FICHES_IDS.has(f.id);
+      const isDwwm = f.id >= 1000 && f.id < 2000;
+      const isDigital = f.id >= 2000;
+      
+      const rawTopic = isDigital ? 'Digital CDO & SD' : (isDwwm ? 'DWWM' : (f.topic || 'Autre'));
+      const finalTopic = rawTopic === 'Digital CDO & SDE' ? 'Digital CDO & SD' : rawTopic;
+      const finalAction = f.action === "Suivre le module d'apprentissage digital CDO & SDE." 
+        ? "Suivre le module d'apprentissage digital CDO & SD." 
+        : f.action;
+
       return {
         ...f,
+        topic: finalTopic,
+        action: finalAction,
         status3: f.status3 || 'A faire',
+        status4: f.status4 || 'A faire',
+        status5: f.status5 || 'A faire',
         inZoneA: isEvalFiche ? (f.inZoneA !== undefined ? f.inZoneA : true) : false,
         inZoneB: isEvalFiche ? (f.inZoneB !== undefined ? f.inZoneB : true) : false,
-        inZoneC: f.inZoneC !== undefined ? f.inZoneC : true,
+        inZoneC: (isDwwm || isDigital) ? false : (f.inZoneC !== undefined ? f.inZoneC : true),
+        inZoneD: (isDwwm || isDigital) ? true : false,
+        inZoneE: false,
       };
     });
   });
 
-  const [activeZone, setActiveZone] = useState<'A' | 'B' | 'C'>('A'); // Zone A: Personal, Zone B: Jury, Zone C: Common
+  const [activeZone, setActiveZone] = useState<'A' | 'B' | 'C' | 'D'>('A'); // Zone A: Personal, Zone B: Jury, Zone C: Common, Zone D: DWWM & Digital
   const [urlFicheId, setUrlFicheId] = useState<number | null>(() => {
     const params = new URLSearchParams(window.location.search);
     const idStr = params.get('ficheId') || params.get('fiche');
@@ -245,7 +285,7 @@ export default function App() {
     type: string;
     name: string;
     url: string;
-    zone: 'A' | 'B' | 'C' | 'common';
+    zone: 'A' | 'B' | 'C' | 'D' | 'E' | 'common';
   }
 
   const getFicheResources = (f: Fiche): ResourceInfo[] => {
@@ -276,6 +316,19 @@ export default function App() {
     if (f.video3) list.push({ key: 'video3', type: 'video', name: "Vidéo Explicative Commune", url: f.video3, zone: 'C' });
     if (f.image3) list.push({ key: 'image3', type: 'image', name: "Iconographies Communes", url: f.image3, zone: 'C' });
     if (f.nblm3) list.push({ key: 'nblm3', type: 'nblm', name: "NotebookLM Références Communes", url: f.nblm3, zone: 'C' });
+
+    if (f.audio4) list.push({ key: 'audio4', type: 'audio', name: "Vocal DWWM (.m4a)", url: f.audio4, zone: 'D' });
+    if (f.slide4) list.push({ key: 'slide4', type: 'slide', name: "Slides DWWM", url: f.slide4, zone: 'D' });
+    if (f.video4) list.push({ key: 'video4', type: 'video', name: "Vidéo DWWM", url: f.video4, zone: 'D' });
+    if (f.image4) list.push({ key: 'image4', type: 'image', name: "Schéma DWWM", url: f.image4, zone: 'D' });
+    if (f.nblm4) list.push({ key: 'nblm4', type: 'nblm', name: "NotebookLM DWWM", url: f.nblm4, zone: 'D' });
+
+    if (f.audio5) list.push({ key: 'audio5', type: 'audio', name: "Vocal Digital CDO & SD (.m4a)", url: f.audio5, zone: 'D' });
+    if (f.slide5) list.push({ key: 'slide5', type: 'slide', name: "Slides Digital CDO & SD", url: f.slide5, zone: 'D' });
+    if (f.video5) list.push({ key: 'video5', type: 'video', name: "Vidéo Digital CDO & SD", url: f.video5, zone: 'D' });
+    if (f.image5) list.push({ key: 'image5', type: 'image', name: "Schéma Digital CDO & SD", url: f.image5, zone: 'D' });
+    if (f.nblm5) list.push({ key: 'nblm5', type: 'nblm', name: "NotebookLM Digital CDO & SD", url: f.nblm5, zone: 'D' });
+    if (f.info5) list.push({ key: 'info5', type: 'slide', name: "Document d'Information (Google Drive)", url: f.info5, zone: 'D' });
 
     return list.filter(r => r.url && r.url !== '');
   };
@@ -485,90 +538,6 @@ export default function App() {
   const [calendarDate, setCalendarDate] = useState<Date>(() => new Date(2026, 5, 1)); // Displays June 2026 by default as it is the current timeline!
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<string>("2026-06-06"); // Set default selected day to today
 
-  // SOUND SCAPES AMBIENT MEDIA CONTROLLER WITH STABLE RAW GITHUB ASSETS
-  const [ambientSounds, setAmbientSounds] = useState<Record<string, { playing: boolean; volume: number }>>({
-    rain: { playing: false, volume: 0.5 },
-    waves: { playing: false, volume: 0.4 },
-    birds: { playing: false, volume: 0.4 },
-    fire: { playing: false, volume: 0.5 }
-  });
-
-  const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({
-    rain: null,
-    waves: null,
-    birds: null,
-    fire: null,
-  });
-
-  // User-activation thread play command to strictly satisfy autoplay policies
-  const handleToggleAmbientSound = (soundKey: string) => {
-    const sources: Record<string, string> = {
-      rain: 'https://raw.githubusercontent.com/alexandrius/ambient-sounds-player/master/audio/rain.mp3',
-      waves: 'https://raw.githubusercontent.com/alexandrius/ambient-sounds-player/master/audio/ocean.mp3',
-      birds: 'https://raw.githubusercontent.com/alexandrius/ambient-sounds-player/master/audio/birds.mp3',
-      fire: 'https://raw.githubusercontent.com/alexandrius/ambient-sounds-player/master/audio/campfire.mp3'
-    };
-
-    // Synchronously determine the target state
-    const currentStatus = ambientSounds[soundKey];
-    const isNextPlaying = !currentStatus.playing;
-
-    try {
-      if (!audioRefs.current[soundKey]) {
-        const audio = new Audio(sources[soundKey]);
-        audio.loop = true;
-        audio.volume = currentStatus.volume;
-        audioRefs.current[soundKey] = audio;
-      }
-
-      const audio = audioRefs.current[soundKey]!;
-      audio.volume = currentStatus.volume;
-
-      if (isNextPlaying) {
-        // Trigger play synchronously inside user event callstack
-        audio.play().catch(e => {
-          console.warn("Direct synchronous ambient play failed: ", e);
-          // Retry briefly if blocked
-          setTimeout(() => {
-            audio.play().catch(err => console.error("Secondary ambient autoplay attempt failed:", err));
-          }, 100);
-        });
-      } else {
-        audio.pause();
-      }
-    } catch (err) {
-      console.error("Critical synchronous audio trigger failed:", err);
-    }
-
-    setAmbientSounds(prev => ({
-      ...prev,
-      [soundKey]: { ...prev[soundKey], playing: isNextPlaying }
-    }));
-  };
-
-  useEffect(() => {
-    // Keep volume levels in sync
-    Object.keys(ambientSounds).forEach((key) => {
-      const audio = audioRefs.current[key];
-      if (audio) {
-        audio.volume = ambientSounds[key].volume;
-      }
-    });
-  }, [ambientSounds]);
-
-  // Clean up sounds on unmount
-  useEffect(() => {
-    return () => {
-      Object.keys(audioRefs.current).forEach(key => {
-        if (audioRefs.current[key]) {
-          try {
-            audioRefs.current[key]?.pause();
-          } catch (e) {}
-        }
-      });
-    };
-  }, []);
-
   // Calendar Event Builders
   const getCalendarLinks = (title: string, dateStr: string) => {
     const parts = dateStr.split(' ');
@@ -684,15 +653,20 @@ export default function App() {
   };
 
   // Status toggle handler
-  const handleStatusChange = (id: number, zone: 'A' | 'B' | 'C', newStatus: FicheStatus) => {
+  const handleStatusChange = (id: number, zone: 'A' | 'B' | 'C' | 'D' | 'E', newStatus: FicheStatus) => {
     setFiches(prev => prev.map(f => {
       if (f.id === id) {
+        const todayStr = new Date().toLocaleDateString('fr-FR');
         if (zone === 'A') {
-          return { ...f, status1: newStatus, date1: newStatus === 'Fait' ? new Date().toLocaleDateString('fr-FR') : f.date1 };
+          return { ...f, status1: newStatus, date1: newStatus === 'Fait' ? todayStr : f.date1 };
         } else if (zone === 'B') {
-          return { ...f, status2: newStatus, date2: newStatus === 'Fait' ? new Date().toLocaleDateString('fr-FR') : f.date2 };
-        } else {
-          return { ...f, status3: newStatus, date3: newStatus === 'Fait' ? new Date().toLocaleDateString('fr-FR') : f.date3 };
+          return { ...f, status2: newStatus, date2: newStatus === 'Fait' ? todayStr : f.date2 };
+        } else if (zone === 'C') {
+          return { ...f, status3: newStatus, date3: newStatus === 'Fait' ? todayStr : f.date3 };
+        } else if (zone === 'D') {
+          return { ...f, status4: newStatus, date4: newStatus === 'Fait' ? todayStr : f.date4 };
+        } else if (zone === 'E') {
+          return { ...f, status5: newStatus, date5: newStatus === 'Fait' ? todayStr : f.date5 };
         }
       }
       return f;
@@ -724,16 +698,17 @@ export default function App() {
   const totalFichesCount = fiches.length;
 
   const fichesInZoneA = useMemo(() => {
-    if (showAllUnderZones) return fiches;
+    if (showAllUnderZones) return fiches.filter(f => f.inZoneC === true);
     return fiches.filter(f => f.inZoneA === true);
   }, [fiches, showAllUnderZones]);
 
   const fichesInZoneB = useMemo(() => {
-    if (showAllUnderZones) return fiches;
+    if (showAllUnderZones) return fiches.filter(f => f.inZoneC === true);
     return fiches.filter(f => f.inZoneB === true);
   }, [fiches, showAllUnderZones]);
 
   const fichesInZoneC = useMemo(() => fiches.filter(f => f.inZoneC === true), [fiches]);
+  const fichesInZoneD = useMemo(() => fiches.filter(f => f.inZoneD === true), [fiches]);
 
   const stats1 = useMemo(() => {
     const totalA = fichesInZoneA.length;
@@ -774,16 +749,30 @@ export default function App() {
     };
   }, [fichesInZoneC]);
 
-  const currentStats = activeZone === 'A' ? stats1 : activeZone === 'B' ? stats2 : stats3;
+  const stats4 = useMemo(() => {
+    const totalD = fichesInZoneD.length;
+    const fait = fichesInZoneD.filter(f => (f.id >= 2000 ? (f.status5 || 'A faire') : (f.status4 || 'A faire')) === 'Fait').length;
+    const cours = fichesInZoneD.filter(f => (f.id >= 2000 ? (f.status5 || 'A faire') : (f.status4 || 'A faire')) === 'En cours').length;
+    const faire = fichesInZoneD.filter(f => (f.id >= 2000 ? (f.status5 || 'A faire') : (f.status4 || 'A faire')) === 'A faire').length;
+    return {
+      fait,
+      cours,
+      faire,
+      pct: totalD > 0 ? Math.round((fait / totalD) * 100) : 0
+    };
+  }, [fichesInZoneD]);
+
+  const currentStats = activeZone === 'A' ? stats1 : activeZone === 'B' ? stats2 : activeZone === 'C' ? stats3 : stats4;
 
   const fichesFilteredByZone = useMemo(() => {
     if (activeZone === 'A') return fichesInZoneA;
     if (activeZone === 'B') return fichesInZoneB;
-    return fichesInZoneC;
-  }, [activeZone, fichesInZoneA, fichesInZoneB, fichesInZoneC]);
+    if (activeZone === 'C') return fichesInZoneC;
+    return fichesInZoneD;
+  }, [activeZone, fichesInZoneA, fichesInZoneB, fichesInZoneC, fichesInZoneD]);
 
   // Domain Category listing
-  const topics = ['All', 'HTML & CSS', 'Bootstrap', 'Bases de Données', 'Python Backend', 'Python Quality & Flask', 'APIs, Git & Sécurité'];
+  const topics = ['All', 'HTML & CSS', 'Bootstrap', 'Bases de Données', 'Python Backend', 'Python Quality & Flask', 'APIs, Git & Sécurité', 'DWWM', 'Digital CDO & SD'];
 
   // Calculate detailed progress for documents that have been marked as seen
   const resourceProgressStats = useMemo(() => {
@@ -802,10 +791,7 @@ export default function App() {
 
     fiches.forEach(f => {
       const title = f.title || '';
-      const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
-      const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
-      const blockCode = bMatch ? `B${bMatch[1]}` : 'Autre';
-      const moduleCode = mMatch ? `M${mMatch[1]}` : 'Autre';
+      const { bCode: blockCode, mCode: moduleCode } = parseBlockAndModule(title);
 
       if (!stats.byBlock[blockCode]) {
         stats.byBlock[blockCode] = { total: 0, seen: 0, pct: 0 };
@@ -852,10 +838,7 @@ export default function App() {
   const fichesFilteredOnlyByBlockAndModule = useMemo(() => {
     return fichesFilteredByZone.filter(f => {
       const title = f.title || '';
-      const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
-      const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
-      const blockCode = bMatch ? `B${bMatch[1]}` : 'Autre';
-      const moduleCode = mMatch ? `M${mMatch[1]}` : 'Autre';
+      const { bCode: blockCode, mCode: moduleCode } = parseBlockAndModule(title);
 
       const matchesBlock = selectedBlock === 'All' || blockCode === selectedBlock;
       const matchesModule = selectedModule === 'All' || moduleCode === selectedModule;
@@ -872,16 +855,12 @@ export default function App() {
 
     fichesFilteredByZone.forEach(f => {
       const title = f.title || '';
-      const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
-      const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
-      
-      const bCode = bMatch ? `B${bMatch[1]}` : 'Autre';
-      const mCode = mMatch ? `M${mMatch[1]}` : 'Autre';
+      const { bCode, mCode, hasModule } = parseBlockAndModule(title);
 
       blocks.add(bCode);
 
       if (selectedBlock === 'All' || bCode === selectedBlock) {
-        if (mMatch) modules.add(mCode);
+        if (hasModule) modules.add(mCode);
         if (f.topic) topicsSet.add(f.topic);
       }
     });
@@ -918,14 +897,11 @@ export default function App() {
   const filteredFiches = useMemo(() => {
     return fichesFilteredByZone.filter(f => {
       const matchesTopic = selectedTopic === 'All' || f.topic === selectedTopic;
-      const fStatus = activeZone === 'A' ? f.status1 : activeZone === 'B' ? f.status2 : (f.status3 || 'A faire');
+      const fStatus = activeZone === 'A' ? f.status1 : activeZone === 'B' ? f.status2 : activeZone === 'C' ? (f.status3 || 'A faire') : activeZone === 'D' ? (f.status4 || 'A faire') : (f.status5 || 'A faire');
       const matchesStatus = selectedStatus === 'All' || fStatus === selectedStatus;
       
       const title = f.title || '';
-      const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
-      const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
-      const blockCode = bMatch ? `B${bMatch[1]}` : 'Autre';
-      const moduleCode = mMatch ? `M${mMatch[1]}` : 'Autre';
+      const { bCode: blockCode, mCode: moduleCode } = parseBlockAndModule(title);
 
       const matchesBlock = selectedBlock === 'All' || blockCode === selectedBlock;
       const matchesModule = selectedModule === 'All' || moduleCode === selectedModule;
@@ -947,10 +923,7 @@ export default function App() {
 
     filteredFiches.forEach(f => {
       const title = f.title || '';
-      const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
-      const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
-      const blockCode = bMatch ? `B${bMatch[1]}` : 'Autre';
-      const moduleCode = mMatch ? `M${mMatch[1]}` : 'Autre';
+      const { bCode: blockCode, mCode: moduleCode } = parseBlockAndModule(title);
 
       if (!map[blockCode]) {
         map[blockCode] = {};
@@ -1015,8 +988,8 @@ export default function App() {
   ];
 
   const renderFicheCard = (fiche: Fiche) => {
-    const currentStatus = activeZone === 'A' ? fiche.status1 : activeZone === 'B' ? fiche.status2 : (fiche.status3 || 'A faire');
-    const completedDate = activeZone === 'A' ? fiche.date1 : activeZone === 'B' ? fiche.date2 : fiche.date3;
+    const currentStatus = activeZone === 'A' ? fiche.status1 : activeZone === 'B' ? fiche.status2 : activeZone === 'C' ? (fiche.status3 || 'A faire') : activeZone === 'D' ? (fiche.status4 || 'A faire') : (fiche.status5 || 'A faire');
+    const completedDate = activeZone === 'A' ? fiche.date1 : activeZone === 'B' ? fiche.date2 : activeZone === 'C' ? fiche.date3 : activeZone === 'D' ? fiche.date4 : fiche.date5;
     const isCompleted = currentStatus === 'Fait';
     const isEnCours = currentStatus === 'En cours';
 
@@ -3163,71 +3136,119 @@ export default function App() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-2.5 mt-1">
-                      {/* Zone A */}
-                      <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-950/40 border border-slate-855">
-                        <span className="text-[9px] font-black tracking-wider text-[#4285F4] uppercase">Zone A — Auto-Évaluation</span>
-                        <div className="flex items-center gap-2 mt-0.5 justify-between">
-                          <select
-                            value={immersiveFiche.status1}
-                            onChange={(e) => {
-                              const val = e.target.value as FicheStatus;
-                              setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status1: val } : f));
-                            }}
-                            className={`text-[10.5px] font-bold rounded-lg p-1 px-2 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
-                              immersiveFiche.status1 === 'Fait' ? 'border-emerald-500 text-emerald-400' : immersiveFiche.status1 === 'En cours' ? 'border-yellow-500 text-yellow-450' : 'border-slate-700 text-slate-400'
-                            }`}
-                          >
-                            <option value="A faire">⭕ A faire</option>
-                            <option value="En cours">⏳ En cours</option>
-                            <option value="Fait">✔ Fait</option>
-                          </select>
-                          <span className="text-[9px] font-mono text-slate-400">{immersiveFiche.date1 || "Date non définie"}</span>
-                        </div>
-                      </div>
+                      {immersiveFiche.inZoneD ? (
+                        immersiveFiche.id >= 2000 ? (
+                          <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-950/40 border border-slate-855">
+                            <span className="text-[9px] font-black tracking-wider text-pink-400 uppercase">Zone D — Digital CDO & SD</span>
+                            <div className="flex items-center gap-2 mt-0.5 justify-between">
+                              <select
+                                value={immersiveFiche.status5 || 'A faire'}
+                                onChange={(e) => {
+                                  const val = e.target.value as FicheStatus;
+                                  setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status5: val, date5: val === 'Fait' ? new Date().toLocaleDateString('fr-FR') : f.date5 } : f));
+                                }}
+                                className={`text-[10.5px] font-bold rounded-lg p-1 px-2 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
+                                  (immersiveFiche.status5 || 'A faire') === 'Fait' ? 'border-emerald-500 text-emerald-400' : (immersiveFiche.status5 || 'A faire') === 'En cours' ? 'border-yellow-500 text-yellow-450' : 'border-slate-700 text-slate-400'
+                                }`}
+                              >
+                                <option value="A faire">⭕ A faire</option>
+                                <option value="En cours">⏳ En cours</option>
+                                <option value="Fait">✔ Fait</option>
+                              </select>
+                              <span className="text-[9px] font-mono text-slate-400">{immersiveFiche.date5 || "Date non définie"}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-950/40 border border-slate-855">
+                            <span className="text-[9px] font-black tracking-wider text-violet-400 uppercase">Zone D — Formation DWWM</span>
+                            <div className="flex items-center gap-2 mt-0.5 justify-between">
+                              <select
+                                value={immersiveFiche.status4 || 'A faire'}
+                                onChange={(e) => {
+                                  const val = e.target.value as FicheStatus;
+                                  setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status4: val, date4: val === 'Fait' ? new Date().toLocaleDateString('fr-FR') : f.date4 } : f));
+                                }}
+                                className={`text-[10.5px] font-bold rounded-lg p-1 px-2 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
+                                  (immersiveFiche.status4 || 'A faire') === 'Fait' ? 'border-emerald-500 text-emerald-400' : (immersiveFiche.status4 || 'A faire') === 'En cours' ? 'border-yellow-500 text-yellow-450' : 'border-slate-700 text-slate-400'
+                                }`}
+                              >
+                                <option value="A faire">⭕ A faire</option>
+                                <option value="En cours">⏳ En cours</option>
+                                <option value="Fait">✔ Fait</option>
+                              </select>
+                              <span className="text-[9px] font-mono text-slate-400">{immersiveFiche.date4 || "Date non définie"}</span>
+                            </div>
+                          </div>
+                        )
+                      ) : (
+                        <>
+                          {/* Zone A */}
+                          <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-950/40 border border-slate-855">
+                            <span className="text-[9px] font-black tracking-wider text-[#4285F4] uppercase">Zone A — Auto-Évaluation</span>
+                            <div className="flex items-center gap-2 mt-0.5 justify-between">
+                              <select
+                                value={immersiveFiche.status1}
+                                onChange={(e) => {
+                                  const val = e.target.value as FicheStatus;
+                                  setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status1: val, date1: val === 'Fait' ? new Date().toLocaleDateString('fr-FR') : f.date1 } : f));
+                                }}
+                                className={`text-[10.5px] font-bold rounded-lg p-1 px-2 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
+                                  immersiveFiche.status1 === 'Fait' ? 'border-emerald-500 text-emerald-400' : immersiveFiche.status1 === 'En cours' ? 'border-yellow-500 text-yellow-450' : 'border-slate-700 text-slate-400'
+                                }`}
+                              >
+                                <option value="A faire">⭕ A faire</option>
+                                <option value="En cours">⏳ En cours</option>
+                                <option value="Fait">✔ Fait</option>
+                              </select>
+                              <span className="text-[9px] font-mono text-slate-400">{immersiveFiche.date1 || "Date non définie"}</span>
+                            </div>
+                          </div>
 
-                      {/* Zone B */}
-                      <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-950/40 border border-slate-855">
-                        <span className="text-[9px] font-black tracking-wider text-[#EA4335] uppercase">Zone B — Jury & Validation</span>
-                        <div className="flex items-center gap-2 mt-0.5 justify-between">
-                          <select
-                            value={immersiveFiche.status2}
-                            onChange={(e) => {
-                              const val = e.target.value as FicheStatus;
-                              setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status2: val } : f));
-                            }}
-                            className={`text-[10.5px] font-bold rounded-lg p-1 px-2 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
-                              immersiveFiche.status2 === 'Fait' ? 'border-emerald-500 text-emerald-400' : immersiveFiche.status2 === 'En cours' ? 'border-yellow-500 text-yellow-450' : 'border-slate-700 text-slate-400'
-                            }`}
-                          >
-                            <option value="A faire">⭕ A faire</option>
-                            <option value="En cours">⏳ En cours</option>
-                            <option value="Fait">✔ Fait</option>
-                          </select>
-                          <span className="text-[9px] font-mono text-slate-400">{immersiveFiche.date2 || "Date non définie"}</span>
-                        </div>
-                      </div>
+                          {/* Zone B */}
+                          <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-950/40 border border-slate-855">
+                            <span className="text-[9px] font-black tracking-wider text-[#EA4335] uppercase">Zone B — Jury & Validation</span>
+                            <div className="flex items-center gap-2 mt-0.5 justify-between">
+                              <select
+                                value={immersiveFiche.status2}
+                                onChange={(e) => {
+                                  const val = e.target.value as FicheStatus;
+                                  setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status2: val, date2: val === 'Fait' ? new Date().toLocaleDateString('fr-FR') : f.date2 } : f));
+                                }}
+                                className={`text-[10.5px] font-bold rounded-lg p-1 px-2 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
+                                  immersiveFiche.status2 === 'Fait' ? 'border-emerald-500 text-emerald-400' : immersiveFiche.status2 === 'En cours' ? 'border-yellow-500 text-yellow-450' : 'border-slate-700 text-slate-400'
+                                }`}
+                              >
+                                <option value="A faire">⭕ A faire</option>
+                                <option value="En cours">⏳ En cours</option>
+                                <option value="Fait">✔ Fait</option>
+                              </select>
+                              <span className="text-[9px] font-mono text-slate-400">{immersiveFiche.date2 || "Date non définie"}</span>
+                            </div>
+                          </div>
 
-                      {/* Zone C */}
-                      <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-950/40 border border-slate-855">
-                        <span className="text-[9px] font-black tracking-wider text-[#34A853] uppercase">Zone C — Tronc Commun</span>
-                        <div className="flex items-center gap-2 mt-0.5 justify-between">
-                          <select
-                            value={immersiveFiche.status3 || 'A faire'}
-                            onChange={(e) => {
-                              const val = e.target.value as FicheStatus;
-                              setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status3: val } : f));
-                            }}
-                            className={`text-[10.5px] font-bold rounded-lg p-1 px-2 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
-                              (immersiveFiche.status3 || 'A faire') === 'Fait' ? 'border-emerald-500 text-emerald-400' : (immersiveFiche.status3 || 'A faire') === 'En cours' ? 'border-yellow-500 text-yellow-450' : 'border-slate-700 text-slate-400'
-                            }`}
-                          >
-                            <option value="A faire">⭕ A faire</option>
-                            <option value="En cours">⏳ En cours</option>
-                            <option value="Fait">✔ Fait</option>
-                          </select>
-                          <span className="text-[9px] font-mono text-slate-400">{immersiveFiche.date3 || "Date non définie"}</span>
-                        </div>
-                      </div>
+                          {/* Zone C */}
+                          <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-950/40 border border-slate-855">
+                            <span className="text-[9px] font-black tracking-wider text-[#34A853] uppercase">Zone C — Tronc Commun</span>
+                            <div className="flex items-center gap-2 mt-0.5 justify-between">
+                              <select
+                                value={immersiveFiche.status3 || 'A faire'}
+                                onChange={(e) => {
+                                  const val = e.target.value as FicheStatus;
+                                  setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status3: val, date3: val === 'Fait' ? new Date().toLocaleDateString('fr-FR') : f.date3 } : f));
+                                }}
+                                className={`text-[10.5px] font-bold rounded-lg p-1 px-2 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
+                                  (immersiveFiche.status3 || 'A faire') === 'Fait' ? 'border-emerald-500 text-emerald-400' : (immersiveFiche.status3 || 'A faire') === 'En cours' ? 'border-yellow-500 text-yellow-450' : 'border-slate-700 text-slate-400'
+                                }`}
+                              >
+                                <option value="A faire">⭕ A faire</option>
+                                <option value="En cours">⏳ En cours</option>
+                                <option value="Fait">✔ Fait</option>
+                              </select>
+                              <span className="text-[9px] font-mono text-slate-400">{immersiveFiche.date3 || "Date non définie"}</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -4138,22 +4159,22 @@ export default function App() {
         </div>
 
         {/* 3. SWITCH HUB ZONE: ACTIVATE USER INTERFACES */}
-        <div className="w-full flex justify-center mb-8">
-          <div className={`p-2 bg-slate-900 border-2 border-slate-950 rounded-full shadow-lg flex gap-2 w-full max-w-lg transition-all duration-300 ring-4 hover:scale-[1.01] ${
-            activeZone === 'A' ? 'ring-blue-500/20' : activeZone === 'B' ? 'ring-red-500/20' : 'ring-emerald-500/20'
+        <div className="w-full flex justify-center mb-8 px-4">
+          <div className={`p-1.5 bg-slate-900 border border-slate-800 rounded-[24px] shadow-lg flex flex-wrap sm:flex-nowrap gap-1.5 w-full max-w-4xl transition-all duration-300 ring-4 hover:scale-[1.01] ${
+            activeZone === 'A' ? 'ring-blue-500/20' : activeZone === 'B' ? 'ring-red-500/20' : activeZone === 'C' ? 'ring-emerald-500/20' : activeZone === 'D' ? 'ring-violet-500/20' : 'ring-pink-500/20'
           }`}>
             <button
                onClick={() => {
                  setActiveZone('A');
                  triggerToast("Zone A activée : Ma Progression Personnelle 🎯", "info");
                }}
-               className={`flex-1 py-2.5 px-4 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
+               className={`flex-1 py-2 px-3 rounded-2xl text-[10px] md:text-xs font-bold uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
                  activeZone === 'A'
                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                   : 'text-slate-400 hover:text-slate-200'
+                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                }`}
             >
-              <User className="w-4 h-4 shrink-0" />
+              <User className="w-3.5 h-3.5 shrink-0" />
               Zone A: Moi
             </button>
             <button
@@ -4161,13 +4182,13 @@ export default function App() {
                  setActiveZone('B');
                  triggerToast("Zone B activée : Livrables pour le Jury ⚖️", "info");
                }}
-               className={`flex-1 py-2.5 px-4 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
+               className={`flex-1 py-2 px-3 rounded-2xl text-[10px] md:text-xs font-bold uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
                  activeZone === 'B'
                    ? 'bg-gradient-to-r from-red-600 to-pink-600 text-white shadow-md'
-                   : 'text-slate-400 hover:text-slate-200'
+                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                }`}
             >
-              <GraduationCap className="w-4 h-4 shrink-0" />
+              <GraduationCap className="w-3.5 h-3.5 shrink-0" />
               Zone B: Jury
             </button>
             <button
@@ -4175,98 +4196,35 @@ export default function App() {
                  setActiveZone('C');
                  triggerToast("Zone C activée : Zone Commune Neutre 🌐", "info");
                }}
-               className={`flex-1 py-2.5 px-4 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
+               className={`flex-1 py-2 px-3 rounded-2xl text-[10px] md:text-xs font-bold uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
                  activeZone === 'C'
                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
-                   : 'text-slate-400 hover:text-slate-200'
+                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
               }`}
             >
-              <Layers className="w-4 h-4 shrink-0" />
+              <Layers className="w-3.5 h-3.5 shrink-0" />
               Zone C: Commune
+            </button>
+            <button
+               onClick={() => {
+                 setActiveZone('D');
+                 triggerToast("Zone D activée : Digital CDO & SD & DWWM 🧭", "info");
+               }}
+               className={`flex-1 py-2 px-3 rounded-2xl text-[10px] md:text-xs font-bold uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
+                 activeZone === 'D'
+                   ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md'
+                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              <Compass className="w-3.5 h-3.5 shrink-0" />
+              Zone D: Digital CDO & SD
             </button>
           </div>
         </div>
 
-        {/* ESPACE CONCENTRATION ZEN & ÉLITE CLUB - MATHILDE'S PEPS GRADIENTS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-7xl mx-auto mb-8">
+        {/* CLUB ÉLITE & DIVERTISSEMENT - MATHILDE'S PEPS GRADIENTS */}
+        <div className="max-w-7xl mx-auto mb-8">
           
-          {/* Card 1: Ambient Sound Instrumental Deck */}
-          <div className="bg-gradient-to-br from-slate-950 to-slate-900 p-5 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden flex flex-col justify-between">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/5 rounded-full filter blur-2xl pointer-events-none"></div>
-            <div>
-              <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5 mb-3.5">
-                <div className="flex items-center gap-2">
-                  <span className="p-1 px-1.5 bg-pink-500/10 text-pink-500 rounded-lg text-xs leading-none">🎧</span>
-                  <h4 className="font-black text-xs uppercase text-slate-200 tracking-widest">Espace Concentration & Fond Sonore</h4>
-                </div>
-                <span className="text-[10px] text-pink-500 font-extrabold uppercase font-mono tracking-wider animate-pulse flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-pink-500"></span> Live Zen
-                </span>
-              </div>
-              
-              <p className="text-[10.5px] text-slate-400 leading-relaxed mb-4 font-medium">
-                Écoutez un bruit blanc ou un son de la nature pour vous isoler et optimiser votre attention pendant l'étude. Activer plusieurs sons crée un mixage unique !
-              </p>
-
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { key: 'rain', name: 'Pluie Douce 🌧️' },
-                  { key: 'waves', name: 'Vagues de Mer 🌊' },
-                  { key: 'birds', name: 'Vent & Oiseaux 🌲' },
-                  { key: 'fire', name: 'Feu Cheminée 🔥' }
-                ].map(sound => {
-                  const state = ambientSounds[sound.key];
-                  return (
-                    <div key={sound.key} className="p-2.5 bg-white/[0.03] border border-white/[0.06] rounded-2xl flex flex-col gap-1.5 transition-all hover:bg-white/[0.06]">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-[11px] font-bold text-slate-200 select-none truncate">
-                          {sound.name}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleAmbientSound(sound.key)}
-                          className={`p-1 px-2 text-[9px] font-black rounded-lg transition-all border shrink-0 cursor-pointer uppercase ${
-                            state?.playing 
-                              ? 'bg-gradient-to-r from-pink-500 to-orange-500 text-white border-transparent shadow shadow-pink-600/30' 
-                              : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          {state?.playing ? 'ON 🔊' : 'OFF 🔇'}
-                        </button>
-                      </div>
-                      
-                      {state?.playing && (
-                        <div className="flex items-center gap-1.5 pt-1 animate-fadeIn">
-                          <span className="text-[8px] text-slate-505">Vol :</span>
-                          <input 
-                            type="range" 
-                            min="0" 
-                            max="1" 
-                            step="0.05" 
-                            value={state.volume} 
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value);
-                              setAmbientSounds(prev => ({
-                                ...prev,
-                                [sound.key]: { ...prev[sound.key], volume: val }
-                              }));
-                            }}
-                            className="w-full h-1 accent-pink-500 bg-slate-800 rounded-lg cursor-pointer"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-white/[0.04] mt-4 flex items-center justify-between text-[9px] text-slate-500">
-              <span>💡 Les sons de fond se mélangent avec vos fichiers audio de cours.</span>
-              <span>© Mathilde Zen Space</span>
-            </div>
-          </div>
-
           {/* Card 2: Community Elite Club Links */}
           <div className="bg-gradient-to-br from-slate-900 to-indigo-950 p-5 rounded-3xl border border-indigo-500/10 shadow-xl relative overflow-hidden flex flex-col justify-between">
             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full filter blur-2xl pointer-events-none"></div>
@@ -4310,8 +4268,8 @@ export default function App() {
                     rel="noopener noreferrer" 
                     className="p-2.5 bg-gradient-to-r from-pink-650 to-rose-650 text-white rounded-2xl flex items-center justify-between gap-2 shadow hover:opacity-95 transition-all text-[11px] font-black cursor-pointer select-none"
                   >
-                    <span>🍎 Apple Music</span>
-                    <ExternalLink className="w-3.5 h-3.5 text-white/85 shrink-0" />
+                     <span>🍎 Apple Music</span>
+                     <ExternalLink className="w-3.5 h-3.5 text-white/85 shrink-0" />
                   </a>
 
                   {/* YouTube Playlist */}
@@ -4534,6 +4492,10 @@ export default function App() {
                       return 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md shadow-rose-500/10 border border-rose-500 rotate-1';
                     case 'APIs, Git & Sécurité':
                       return 'bg-gradient-to-r from-cyan-600 to-teal-500 text-white shadow-md shadow-cyan-505 border border-[#22d3ee] -rotate-1';
+                    case 'DWWM':
+                      return 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-500/10 border border-violet-400 rotate-1';
+                    case 'Digital CDO & SD':
+                      return 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-md shadow-pink-500/10 border border-pink-400 -rotate-1';
                     default:
                       return 'bg-slate-900 text-white shadow-md rotate-0';
                   }
@@ -4812,7 +4774,7 @@ export default function App() {
             {/* Quick jump Zone Selector Shortcuts */}
             <div className="flex flex-col gap-1.5">
               <p className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Accès Zones :</p>
-              <div className="grid grid-cols-3 gap-1">
+              <div className="grid grid-cols-4 gap-1">
                 <button
                   onClick={() => {
                     setActiveZone('A');
@@ -4833,7 +4795,7 @@ export default function App() {
                     window.scrollTo({ top: 400, behavior: 'smooth' });
                   }}
                   className={`py-1 text-xs font-black rounded-lg text-center transition-all cursor-pointer ${
-                    activeZone === 'B' ? 'bg-[#EA4335] text-white shadow-md shadow-red-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-705 text-slate-303'
+                    activeZone === 'B' ? 'bg-[#EA4335] text-white shadow-md shadow-red-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
                   }`}
                   title="Sauter à la Zone B (Jury)"
                 >
@@ -4846,11 +4808,24 @@ export default function App() {
                     window.scrollTo({ top: 400, behavior: 'smooth' });
                   }}
                   className={`py-1 text-xs font-black rounded-lg text-center transition-all cursor-pointer ${
-                    activeZone === 'C' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-705 text-slate-303'
+                    activeZone === 'C' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
                   }`}
                   title="Sauter à la Zone C (Commune)"
                 >
                   C
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveZone('D');
+                    triggerToast("🧭 Zone D (Digital CDO & SD & DWWM) activée !", "success");
+                    window.scrollTo({ top: 400, behavior: 'smooth' });
+                  }}
+                  className={`py-1 text-xs font-black rounded-lg text-center transition-all cursor-pointer ${
+                    activeZone === 'D' ? 'bg-violet-600 text-white shadow-md shadow-violet-500/20 scale-105' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
+                  title="Sauter à la Zone D (Digital CDO & SD)"
+                >
+                  D
                 </button>
               </div>
             </div>
@@ -4923,8 +4898,8 @@ export default function App() {
       {false && (
         <div className="hidden bg-white/20">
             {filteredFiches.map(fiche => {
-              const currentStatus = activeZone === 'A' ? fiche.status1 : activeZone === 'B' ? fiche.status2 : (fiche.status3 || 'A faire');
-              const completedDate = activeZone === 'A' ? fiche.date1 : activeZone === 'B' ? fiche.date2 : fiche.date3;
+              const currentStatus = activeZone === 'A' ? fiche.status1 : activeZone === 'B' ? fiche.status2 : activeZone === 'C' ? (fiche.status3 || 'A faire') : activeZone === 'D' ? (fiche.status4 || 'A faire') : (fiche.status5 || 'A faire');
+              const completedDate = activeZone === 'A' ? fiche.date1 : activeZone === 'B' ? fiche.date2 : activeZone === 'C' ? fiche.date3 : activeZone === 'D' ? fiche.date4 : fiche.date5;
               const isCompleted = currentStatus === 'Fait';
               const isEnCours = currentStatus === 'En cours';
 
@@ -4936,7 +4911,7 @@ export default function App() {
                       ? 'border-emerald-500 bg-[#10b981]/[0.015] ring-[#34A853]/10 shadow-[0_4px_15px_-3px_rgba(16,185,129,0.15)]' 
                       : isEnCours
                         ? 'border-[#FBBC05] bg-[#FBBC05]/[0.01] ring-[#FBBC05]/10 shadow-[0_4px_12px_-3px_rgba(251,188,5,0.1)]'
-                        : (activeZone === 'A' ? 'border-blue-500/40 hover:border-blue-500 ring-slate-100/50' : activeZone === 'B' ? 'border-red-500/40 hover:border-red-500 ring-slate-100/20' : 'border-emerald-500/40 hover:border-emerald-500 ring-slate-100/10')
+                        : (activeZone === 'A' ? 'border-blue-500/40 hover:border-blue-500 ring-slate-100/50' : activeZone === 'B' ? 'border-red-500/40 hover:border-red-500 ring-slate-100/20' : activeZone === 'C' ? 'border-emerald-500/40 hover:border-emerald-500 ring-slate-100/10' : activeZone === 'D' ? 'border-violet-500/40 hover:border-violet-500 ring-slate-100/10' : 'border-pink-500/40 hover:border-pink-500 ring-slate-100/10')
                   }`}
                 >
                   {/* Top multi-color strip for Google Brand aesthetic */}
