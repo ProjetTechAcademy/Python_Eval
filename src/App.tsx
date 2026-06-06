@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initialFiches, EVAL_FICHES_IDS } from './data/initialData';
-import { Fiche, FicheStatus } from './types';
+import { Fiche, FicheStatus, ScheduledDate, Reminder } from './types';
 import ThreeDBox from './components/ThreeDBox';
 import ResourcePlayer from './components/ResourcePlayer';
 import IntegratedAudioVisualPlayer from './components/IntegratedAudioVisualPlayer';
@@ -45,7 +45,9 @@ import {
   Layers,
   Grid,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Trash2,
+  Bell
 } from 'lucide-react';
 
 function getDriveEmbedUrl(url: string | undefined): string | null {
@@ -264,9 +266,9 @@ export default function App() {
     autoSyncSpreadsheet();
   }, []);
 
-  const [viewMode, setViewMode] = useState<'continue' | 'segmented'>(() => {
+  const [viewMode, setViewMode] = useState<'continue' | 'segmented' | 'planning'>(() => {
     const localMode = localStorage.getItem('m-motors-view-mode');
-    return (localMode as 'continue' | 'segmented') || 'segmented'; // Default to organized segmented view for easy navigation
+    return (localMode as 'continue' | 'segmented' | 'planning') || 'segmented'; // Default to organized segmented view for easy navigation
   });
 
   const [expandedBlocks, setExpandedBlocks] = useState<Record<string, boolean>>({
@@ -289,6 +291,164 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('m-motors-view-mode', viewMode);
   }, [viewMode]);
+
+  // PLANNING & REMINDERS STATE
+  const [reminders, setReminders] = useState<Reminder[]>(() => {
+    const local = localStorage.getItem('m-motors-reminders');
+    if (local) {
+      try {
+        return JSON.parse(local);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('m-motors-reminders', JSON.stringify(reminders));
+  }, [reminders]);
+
+  const [ficheForReminderModal, setFicheForReminderModal] = useState<Fiche | null>(null);
+  const [reminderType, setReminderType] = useState<'spaced' | 'custom'>('spaced');
+  const [customDateValue, setCustomDateValue] = useState<string>('');
+
+  // SOUND SCAPES AMBIENT MEDIA CONTROLLER
+  const [ambientSounds, setAmbientSounds] = useState<Record<string, { playing: boolean; volume: number }>>({
+    rain: { playing: false, volume: 0.5 },
+    waves: { playing: false, volume: 0.4 },
+    birds: { playing: false, volume: 0.4 },
+    fire: { playing: false, volume: 0.5 }
+  });
+
+  const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({
+    rain: null,
+    waves: null,
+    birds: null,
+    fire: null,
+  });
+
+  useEffect(() => {
+    const sources: Record<string, string> = {
+      rain: 'https://www.soundjay.com/nature/sounds/rain-07.mp3',
+      waves: 'https://www.soundjay.com/nature/sounds/ocean-wave-1.mp3',
+      birds: 'https://www.soundjay.com/nature/sounds/forest-wind-1.mp3',
+      fire: 'https://www.soundjay.com/nature/sounds/fire-1.mp3'
+    };
+
+    Object.keys(sources).forEach((key) => {
+      try {
+        if (!audioRefs.current[key]) {
+          const audio = new Audio(sources[key]);
+          audio.loop = true;
+          audioRefs.current[key] = audio;
+        }
+        const audio = audioRefs.current[key]!;
+        audio.volume = ambientSounds[key].volume;
+        
+        if (ambientSounds[key].playing) {
+          audio.play().catch(e => console.log("Ambient sound play blocked by browser:", e));
+        } else {
+          audio.pause();
+        }
+      } catch (e) {
+        console.error("Ambient Audio Load Error:", e);
+      }
+    });
+
+    // Clean up sounds on unmount
+    return () => {
+      Object.keys(audioRefs.current).forEach(key => {
+        if (audioRefs.current[key]) {
+          audioRefs.current[key]?.pause();
+        }
+      });
+    };
+  }, [ambientSounds]);
+
+  // Calendar Event Builders
+  const getCalendarLinks = (title: string, dateStr: string) => {
+    const parts = dateStr.split(' ');
+    const dParts = parts[0].split('-');
+    const tParts = (parts[1] || '09:00').split(':');
+    
+    const year = dParts[0];
+    const month = dParts[1];
+    const day = dParts[2];
+    const hour = tParts[0];
+    const minute = tParts[1];
+    
+    const dObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute));
+    const pad = (num: number) => String(num).padStart(2, '0');
+    
+    const startIso = `${dObj.getUTCFullYear()}${pad(dObj.getUTCMonth()+1)}${pad(dObj.getUTCDate())}T${pad(dObj.getUTCHours())}${pad(dObj.getUTCMinutes())}00Z`;
+    const endObj = new Date(dObj.getTime() + 45 * 60 * 1000);
+    const endIso = `${endObj.getUTCFullYear()}${pad(endObj.getUTCMonth()+1)}${pad(endObj.getUTCDate())}T${pad(endObj.getUTCHours())}${pad(endObj.getUTCMinutes())}00Z`;
+    
+    const textEncoded = encodeURIComponent(`Révision M-Motors : ${title} 📚`);
+    const detailsEncoded = encodeURIComponent(`Rappel automatique de révision espacée pour le cours M-Motors Python & Flask : "${title}". Ne lâche rien ! 💪`);
+    
+    const google = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${textEncoded}&dates=${startIso}/${endIso}&details=${detailsEncoded}`;
+    const outlook = `https://outlook.live.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent&subject=${textEncoded}&startdt=${dObj.toISOString()}&enddt=${endObj.toISOString()}&body=${detailsEncoded}`;
+    
+    return { google, outlook };
+  };
+
+  const downloadIcsFile = (title: string, occurrences: { label: string; date: string }[]) => {
+    const pad = (num: number) => String(num).padStart(2, '0');
+    let icsContent = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Mathilde Study Planner//M-Motors//FR\r\nCALSCALE:GREGORIAN\r\n";
+    
+    occurrences.forEach((occ, idx) => {
+      const parts = occ.date.split(' ');
+      const dParts = parts[0].split('-');
+      const tParts = (parts[1] || '09:00').split(':');
+      
+      const year = parseInt(dParts[0]);
+      const month = parseInt(dParts[1]) - 1;
+      const day = parseInt(dParts[2]);
+      const hour = parseInt(tParts[0]);
+      const minute = parseInt(tParts[1]);
+      
+      const dObj = new Date(year, month, day, hour, minute);
+      const endObj = new Date(dObj.getTime() + 45 * 60 * 1000);
+      
+      const startIso = `${dObj.getUTCFullYear()}${pad(dObj.getUTCMonth()+1)}${pad(dObj.getUTCDate())}T${pad(dObj.getUTCHours())}${pad(dObj.getUTCMinutes())}00Z`;
+      const endIso = `${endObj.getUTCFullYear()}${pad(endObj.getUTCMonth()+1)}${pad(endObj.getUTCDate())}T${pad(endObj.getUTCHours())}${pad(endObj.getUTCMinutes())}00Z`;
+      const dtStamp = startIso;
+      
+      icsContent += "BEGIN:VEVENT\r\n";
+      icsContent += `UID:${Date.now()}-${idx}@m-motors-study\r\n`;
+      icsContent += `DTSTAMP:${dtStamp}\r\n`;
+      icsContent += `DTSTART:${startIso}\r\n`;
+      icsContent += `DTEND:${endIso}\r\n`;
+      icsContent += `SUMMARY:Révision M-Motors : ${occ.label} - ${title.replace(/[,;]/g, '')}\r\n`;
+      icsContent += `DESCRIPTION:Rappel de révision espacée (${occ.label}) pour le cours: "${title.replace(/[,;]/g, '')}".\\n🎯 M-Motors Sync.\\r\n`;
+      icsContent += "END:VEVENT\r\n";
+    });
+    
+    icsContent += "END:VCALENDAR";
+    
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `rappel-etude-${title.toLowerCase().replace(/[^a-z0-9]/g, '-')}.ics`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const formatFriendlyDate = (dStr: string) => {
+    const parts = dStr.split(' ');
+    const dateParts = parts[0].split('-');
+    const timeStr = parts[1] || '';
+    
+    const months = ['Janv.', 'Févr.', 'Mars', 'Avril', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
+    const monthIdx = parseInt(dateParts[1]) - 1;
+    const monthName = months[monthIdx] || dateParts[1];
+    
+    return `${dateParts[2]} ${monthName} ${dateParts[0]} à ${timeStr}`;
+  };
 
   const handleAssignPdfUrl = (id: number, url: string) => {
     setFiches(prev => prev.map(f => {
@@ -660,6 +820,13 @@ export default function App() {
                   >
                     <Volume2 className="w-3.5 h-3.5" /> Écouter 🔊
                   </button>
+                  <button
+                    onClick={() => setFicheForReminderModal(fiche)}
+                    className="px-2.5 py-0.5 bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600 text-white rounded-md text-[10px] font-black uppercase tracking-wider flex items-center gap-1 hover:scale-105 active:scale-[0.98] transition-all shadow-sm cursor-pointer select-none"
+                    title="Planifier des rappels de révision espacée"
+                  >
+                    <Calendar className="w-3 h-3 text-white" /> Rappels 📅
+                  </button>
                   <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-150">
                     N° {fiche.id}
                   </span>
@@ -747,8 +914,8 @@ export default function App() {
               {/* Common File (PDF) with edit / custom link options */}
               {fiche.coursFile && (
                 <div className="p-2.5 bg-blue-500/[0.02] hover:bg-blue-500/[0.04] border border-slate-200 border-l-[3.5px] border-l-[#4285F4] rounded-xl flex flex-col gap-1.5 transition-all mb-2 shadow-sm transform hover:-translate-y-[1px]">
-                  <div className="flex items-center justify-between text-[10px] gap-2">
-                    <span className="font-bold text-slate-800 truncate flex items-center gap-1" title={fiche.coursFile}>
+                  <div className="flex items-start justify-between text-[10px] gap-2">
+                    <span className="font-bold text-slate-800 flex items-start gap-1 whitespace-normal break-all max-w-full leading-normal" title={fiche.coursFile}>
                       📂 <span className="font-mono text-[10px] text-slate-705">{fiche.coursFile}</span>
                     </span>
                     <span className="text-[8px] text-[#4285F4] bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md font-sans font-black uppercase shrink-0">
@@ -1136,6 +1303,546 @@ export default function App() {
           )
         )}
 
+      </div>
+    );
+  };
+
+  const renderPlanningView = () => {
+    // Collect all scheduled occurrences across all reminders
+    const allOccurrences: {
+      id: string; 
+      ficheId: number;
+      ficheTitle: string;
+      topic: string;
+      label: string; // J+3, J+7, etc.
+      dateStr: string; // YYYY-MM-DD HH:MM
+      completed: boolean;
+      type: 'spaced' | 'custom';
+    }[] = [];
+
+    reminders.forEach(r => {
+      r.scheduledDates.forEach(occ => {
+        allOccurrences.push({
+          id: r.id,
+          ficheId: r.ficheId,
+          ficheTitle: r.ficheTitle,
+          topic: r.topic,
+          label: occ.label,
+          dateStr: occ.date,
+          completed: occ.completed,
+          type: r.type
+        });
+      });
+    });
+
+    // Sort chronologically
+    allOccurrences.sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+
+    const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const dueToday = allOccurrences.filter(occ => !occ.completed && occ.dateStr.startsWith(todayStr));
+    const upcoming = allOccurrences.filter(occ => occ.dateStr > todayStr || (!occ.completed && occ.dateStr < todayStr && !occ.dateStr.startsWith(todayStr)));
+    const pastCompleted = allOccurrences.filter(occ => occ.completed);
+
+    const toggleOccCompleted = (reminderId: string, label: string) => {
+      setReminders(prev => prev.map(r => {
+        if (r.id === reminderId) {
+          return {
+            ...r,
+            scheduledDates: r.scheduledDates.map(occ => {
+              if (occ.label === label) {
+                const newStatus = !occ.completed;
+                if (newStatus) {
+                  triggerToast("Félicitations Mathilde ! Rappel validé et appris ✨", "success");
+                }
+                return { ...occ, completed: newStatus };
+              }
+              return occ;
+            })
+          };
+        }
+        return r;
+      }));
+    };
+
+    const deleteReminderGroup = (reminderId: string) => {
+      if (window.confirm("Voulez-vous vraiment supprimer tous les rappels de ce cours ?")) {
+        setReminders(prev => prev.filter(r => r.id !== reminderId));
+        triggerToast("Rappels supprimés avec succès 🗑️", "info");
+      }
+    };
+
+    return (
+      <div className="flex flex-col gap-6 max-w-7xl mx-auto px-1 animate-fadeIn">
+        
+        {/* Fuchsia-Orange Method Information Card */}
+        <div className="bg-gradient-to-r from-pink-600 via-rose-500 to-orange-500 text-white rounded-3xl p-5 md:p-6 shadow-xl border border-pink-400/20 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full filter blur-2xl pointer-events-none -mr-12 -mt-12"></div>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 z-10 relative">
+            <div className="flex items-start gap-3">
+              <span className="text-3xl bg-white/20 p-2.5 rounded-2xl shrink-0">⏳</span>
+              <div>
+                <h3 className="text-lg md:text-xl font-extrabold text-white flex items-center gap-1.5 leading-tight">
+                  La Répétition Espacée (Méthode des J) • Cerveau d'Élite 🎓⚡
+                </h3>
+                <p className="text-xs text-white/90 mt-1 max-w-3xl leading-relaxed">
+                  Luttez scientifiquement contre la <strong>courbe de l'oubli</strong>. En révisant à intervalles progressifs (<strong>J0 &rarr; J+3 &rarr; J+7 &rarr; J+14 &rarr; J+30 &rarr; J+60 &rarr; J+90</strong>), l'information s'ancre à vie dans votre mémoire à long terme.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* TODAY'S DUE REVISIONS */}
+        {dueToday.length > 0 ? (
+          <div className="bg-pink-50 border-2 border-pink-400 p-5 rounded-3xl shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/[0.03] rounded-full pointer-events-none"></div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-2.5 h-2.5 bg-pink-600 rounded-full animate-ping shrink-0"></span>
+              <h4 className="font-black text-pink-700 uppercase tracking-wider text-xs sm:text-sm">
+                🚨 EXERCICES À REVOIR AUJOURD'HUI :
+              </h4>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {dueToday.map((occ, idx) => {
+                const associatedFiche = fiches.find(f => f.id === occ.ficheId);
+                return (
+                  <div 
+                    key={`${occ.id}-${occ.label}-${idx}`}
+                    className="bg-white p-3.5 rounded-2xl border border-pink-205 shadow-sm flex items-center justify-between gap-3 hover:border-pink-300 transition-all duration-300"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-1.5 py-0.5 bg-pink-100 text-pink-700 font-extrabold text-[8.5px] rounded border border-pink-200 uppercase tracking-widest leading-none">
+                          {occ.label}
+                        </span>
+                        <span className="text-[9px] font-bold text-slate-400 font-mono">Fiche #{occ.ficheId}</span>
+                      </div>
+                      <p className="font-extrabold text-slate-900 text-xs sm:text-sm truncate mt-1 leading-snug">
+                        {occ.ficheTitle}
+                      </p>
+                      <p className="text-[9.5px] text-slate-400 mt-0.5 font-mono">
+                        Rappel fixé à : {formatFriendlyDate(occ.dateStr)}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {associatedFiche && (
+                        <button
+                          onClick={() => {
+                            const audioUrl = activeZone === 'A' ? associatedFiche.audio1 : activeZone === 'B' ? associatedFiche.audio2 : associatedFiche.audio3;
+                            if (audioUrl) {
+                              setSelectedResourceForPreview({
+                                title: associatedFiche.title,
+                                resourceName: `Audio d’Étude #${associatedFiche.id}`,
+                                url: audioUrl,
+                                type: 'audio',
+                                ficheId: associatedFiche.id
+                              });
+                            } else if (associatedFiche.coursFile) {
+                              setSelectedResourceForPreview({
+                                title: associatedFiche.title,
+                                resourceName: associatedFiche.coursFile,
+                                url: associatedFiche.coursFileUrl || associatedFiche.coursFile,
+                                type: 'slide',
+                                ficheId: associatedFiche.id
+                              });
+                            }
+                            triggerToast("Lancement du support de révision !", "info");
+                          }}
+                          className="p-1 px-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[10px] font-bold transition-all shadow-sm"
+                        >
+                          👁️ Étudier
+                        </button>
+                      )}
+                      <button
+                        onClick={() => toggleOccCompleted(occ.id, occ.label)}
+                        className="p-1.5 bg-pink-100 hover:bg-pink-600 text-pink-700 hover:text-white rounded-lg text-[10px] font-bold transition-all border border-pink-200 shadow-sm flex items-center gap-0.5 cursor-pointer"
+                      >
+                        ✔ Fait
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-emerald-50 border border-emerald-150 p-4 rounded-3xl text-emerald-800 text-xs md:text-sm flex items-center gap-2.5 animate-fadeIn">
+            <span className="text-xl">🎉</span>
+            <div>
+              <span className="font-black text-emerald-900">Tout est sous contrôle Mathilde !</span> Aucune fiche n'est obligatoire d'urgence aujourd'hui.
+            </div>
+          </div>
+        )}
+
+        {/* CHRONOLOGICAL LIST & COURSE GROUPINGS */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          <div className="lg:col-span-7 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm">
+            <h4 className="font-black text-slate-800 text-xs uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-slate-100 pb-2.5">
+              📅 Agenda chronologique des fiches ({upcoming.length} rappels programmés)
+            </h4>
+
+            {upcoming.length === 0 ? (
+              <div className="text-center py-10 text-slate-400 text-xs italic bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                Aucun rappel planifié. Utilisez le bouton "Rappels 📅" sur les cartes de cours pour en programmer !
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {upcoming.slice(0, 15).map((occ, idx) => {
+                  const associatedFiche = fiches.find(f => f.id === occ.ficheId);
+                  const isPastAndOverdue = occ.dateStr < todayStr;
+                  return (
+                    <div 
+                      key={`${occ.id}-${occ.label}-up-${idx}`}
+                      className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                        isPastAndOverdue 
+                          ? 'bg-rose-50/40 border-rose-100 hover:border-rose-200 animate-pulse-subtle' 
+                          : 'bg-slate-50/50 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`px-1.5 py-0.5 font-bold text-[8px] rounded uppercase tracking-wider leading-none ${
+                            occ.label.includes('J+') ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-705'
+                          }`}>
+                            {occ.label}
+                          </span>
+                          <span className="text-[9px] font-bold text-slate-405 font-mono">Fiche #{occ.ficheId}</span>
+                          {isPastAndOverdue && (
+                            <span className="text-[8px] font-mono bg-rose-200 text-rose-700 px-1 py-0.5 rounded font-black uppercase tracking-wider">RETARD ⏳</span>
+                          )}
+                        </div>
+                        <p className="font-bold text-slate-800 text-xs mt-1 truncate">
+                          {occ.ficheTitle}
+                        </p>
+                        <p className="text-[9px] text-slate-400 font-mono mt-0.5">
+                          Date : {formatFriendlyDate(occ.dateStr)}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        {associatedFiche && (
+                          <button
+                            onClick={() => {
+                              const audioUrl = activeZone === 'A' ? associatedFiche.audio1 : activeZone === 'B' ? associatedFiche.audio2 : associatedFiche.audio3;
+                              if (audioUrl) {
+                                setSelectedResourceForPreview({
+                                  title: associatedFiche.title,
+                                  resourceName: `Audio d’Étude #${associatedFiche.id}`,
+                                  url: audioUrl,
+                                  type: 'audio',
+                                  ficheId: associatedFiche.id
+                                });
+                              } else if (associatedFiche.coursFile) {
+                                setSelectedResourceForPreview({
+                                  title: associatedFiche.title,
+                                  resourceName: associatedFiche.coursFile,
+                                  url: associatedFiche.coursFileUrl || associatedFiche.coursFile,
+                                  type: 'slide',
+                                  ficheId: associatedFiche.id
+                                });
+                              }
+                            }}
+                            className="p-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[9.5px] font-bold transition-all"
+                          >
+                            👁️ Lire
+                          </button>
+                        )}
+                        <button
+                          onClick={() => toggleOccCompleted(occ.id, occ.label)}
+                          className="p-1 px-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-[9.5px] font-bold transition-all cursor-pointer shadow-sm"
+                        >
+                          ✔ Fait
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="lg:col-span-5 flex flex-col gap-6">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm">
+              <h4 className="font-black text-slate-800 text-xs uppercase tracking-widest mb-3.5 flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                🎒 Progression par Cours ({reminders.length} cours)
+              </h4>
+
+              {reminders.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs italic">
+                  Aucun cours planifié pour le moment.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {reminders.map((r, idx) => (
+                    <div 
+                      key={`rem-card-${r.id}-${idx}`}
+                      className="p-3 bg-slate-50 rounded-2xl border border-slate-200 relative overflow-hidden flex flex-col gap-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[9px] text-pink-500 font-extrabold uppercase font-mono tracking-wider">
+                            {r.topic}
+                          </p>
+                          <h5 className="text-[11px] font-extrabold text-slate-900 leading-snug mt-0.5">
+                            {r.ficheTitle}
+                          </h5>
+                        </div>
+                        <button
+                          onClick={() => deleteReminderGroup(r.id)}
+                          className="text-[10px] text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-all font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-slate-200/60">
+                        {r.scheduledDates.map((occ, oIdx) => (
+                          <span 
+                            key={`${occ.label}-${oIdx}`}
+                            onClick={() => toggleOccCompleted(r.id, occ.label)}
+                            className={`px-1.5 py-0.5 text-[8.5px] font-extrabold rounded-md cursor-pointer select-none transition-all flex items-center gap-0.5 border ${
+                              occ.completed 
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                                : 'bg-slate-200 text-slate-600 border-slate-300 hover:bg-slate-300'
+                            }`}
+                          >
+                            <span>{occ.completed ? '✔' : '⏳'}</span>
+                            <span>{occ.label}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    );
+  };
+
+  const renderReminderModal = () => {
+    if (!ficheForReminderModal) return null;
+
+    const nowLocal = new Date();
+    const j0 = new Date(nowLocal);
+    j0.setMinutes(0, 0, 0);
+    j0.setHours(j0.getHours() + 1);
+
+    const intervals = [3, 7, 14, 30, 60, 90];
+    const generatedDates = intervals.map(days => {
+      const d = new Date(j0);
+      d.setDate(d.getDate() + days);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = '00';
+      return {
+        label: `J+${days}`,
+        dateStr: `${year}-${month}-${day} ${hours}:${minutes}`,
+        dateObj: d
+      };
+    });
+
+    const j0Str = `${j0.getFullYear()}-${String(j0.getMonth() + 1).padStart(2, '0')}-${String(j0.getDate()).padStart(2, '0')} ${String(j0.getHours()).padStart(2, '0')}:00`;
+
+    const saveAndExport = (platform: 'google' | 'ics' | 'outlook' | 'apple') => {
+      const scheduledDatesList: { label: string; date: string; completed: boolean }[] = [];
+
+      if (reminderType === 'spaced') {
+        scheduledDatesList.push({ label: 'J0', date: j0Str, completed: false });
+        generatedDates.forEach(it => {
+          scheduledDatesList.push({ label: it.label, date: it.dateStr, completed: false });
+        });
+      } else {
+        const customDate = customDateValue || new Date(Date.now() + 86450000).toISOString().substring(0, 16);
+        const [dVal, tVal] = customDate.replace('T', ' ').split(' ');
+        scheduledDatesList.push({ label: 'Perso', date: `${dVal} ${tVal || '09:00'}`, completed: false });
+      }
+
+      const newReminder: Reminder = {
+        id: Date.now().toString(),
+        ficheId: ficheForReminderModal.id,
+        ficheTitle: ficheForReminderModal.title,
+        topic: ficheForReminderModal.topic,
+        type: reminderType,
+        baseDate: j0Str,
+        scheduledDates: scheduledDatesList
+      };
+
+      setReminders(prev => [newReminder, ...prev.filter(r => r.ficheId !== ficheForReminderModal.id)]);
+
+      if (platform === 'ics') {
+        downloadIcsFile(ficheForReminderModal.title, scheduledDatesList);
+        triggerToast("Fichier iCal (.ics) téléchargé pour votre calendrier !", "success");
+      } else if (platform === 'google') {
+        const targetOcc = scheduledDatesList[0];
+        const { google } = getCalendarLinks(ficheForReminderModal.title, targetOcc.date);
+        window.open(google, '_blank');
+        triggerToast("Redirection Google Agenda activée !", "success");
+      } else if (platform === 'outlook') {
+        const targetOcc = scheduledDatesList[0];
+        const { outlook } = getCalendarLinks(ficheForReminderModal.title, targetOcc.date);
+        window.open(outlook, '_blank');
+        triggerToast("Redirection Outlook activée !", "success");
+      } else if (platform === 'apple') {
+        downloadIcsFile(ficheForReminderModal.title, scheduledDatesList);
+        triggerToast("Fichier .ics disponible !", "success");
+      }
+
+      setFicheForReminderModal(null);
+    };
+
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-200 text-slate-800 animate-slideDown max-h-[90vh] flex flex-col">
+          
+          <div className="bg-gradient-to-r from-pink-600 to-orange-500 text-white p-5 pr-12 relative shrink-0">
+            <h3 className="font-extrabold text-base md:text-lg flex items-center gap-1.5">
+              📅 Planifier des Rappels de Révision
+            </h3>
+            <p className="text-xs text-pink-50 leading-relaxed mt-1">
+              Cours : <strong className="text-white">"{ficheForReminderModal.title}"</strong>
+            </p>
+            <button
+              onClick={() => setFicheForReminderModal(null)}
+              className="absolute top-4 right-4 text-white hover:text-pink-100 font-extrabold text-lg"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="p-5 flex-1 overflow-y-auto space-y-4 no-scrollbar">
+            
+            <div className="p-3 bg-pink-50 border border-pink-100 rounded-2xl text-[11px] text-pink-850 space-y-1">
+              <span className="font-black text-pink-700 uppercase block tracking-wider">💡 BIENVENUE MATHILDE :</span>
+              <p className="leading-relaxed">
+                Le système arrondit votre cours à l'heure supérieure. Ex : Vous étudiez à <strong>08h20</strong> &rarr; début théorique (J0) planifié à <strong>09h00</strong>.
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 bg-slate-100 p-1 rounded-2xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setReminderType('spaced')}
+                className={`flex-1 py-1.5 text-center text-xs font-black rounded-xl transition-all cursor-pointer ${
+                  reminderType === 'spaced' 
+                    ? 'bg-gradient-to-r from-pink-500 to-orange-500 text-white shadow' 
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🔄 Repétition Espacée J+3...90
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReminderType('custom');
+                  if (!customDateValue) {
+                    const tom = new Date();
+                    tom.setDate(tom.getDate() + 1);
+                    tom.setMinutes(0,0,0);
+                    tom.setHours(9);
+                    setCustomDateValue(tom.toISOString().substring(0, 16));
+                  }
+                }}
+                className={`flex-1 py-1.5 text-center text-xs font-black rounded-xl transition-all cursor-pointer ${
+                  reminderType === 'custom' 
+                    ? 'bg-gradient-to-r from-pink-500 to-orange-500 text-white shadow' 
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                📅 Rappel Unique
+              </button>
+            </div>
+
+            {reminderType === 'spaced' ? (
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-[10.5px]">
+                <span className="text-[10px] font-extrabold text-[#EA4335] uppercase tracking-widest block border-b border-slate-150 pb-1">
+                  CALCUL DES PROCHAINES RÉVISIONS (MÉTHODE DES J) :
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex justify-between p-1.5 px-2 bg-pink-50 rounded-md border border-pink-150 text-pink-800 font-bold">
+                    <span>J0 (Aujourd'hui) :</span>
+                    <span>{j0Str.split(' ')[1]}</span>
+                  </div>
+                  {generatedDates.map((item, idx) => (
+                    <div key={idx} className="flex justify-between p-1.5 px-2 bg-slate-100 rounded-md border border-slate-150">
+                      <span className="font-bold">{item.label} :</span>
+                      <span className="font-mono text-slate-550">{item.dateStr.split(' ')[0]}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-black tracking-widest text-slate-500 block">
+                  Date et heure :
+                </label>
+                <input
+                  type="datetime-local"
+                  value={customDateValue}
+                  onChange={(e) => setCustomDateValue(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3 text-xs text-slate-800"
+                />
+              </div>
+            )}
+
+            <div className="space-y-2 pt-2 border-t border-slate-200">
+              <label className="text-[10px] uppercase font-black tracking-widest text-pink-650 block">
+                Intégration instantanée dans votre calendrier habituel :
+              </label>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => saveAndExport('google')}
+                  className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-250 rounded-2xl text-[11px] font-black flex items-center justify-center gap-1 cursor-pointer transition-transform hover:scale-101"
+                >
+                  🌐 Google Cal.
+                </button>
+                <button
+                  type="button"
+                  onClick={() => saveAndExport('ics')}
+                  className="p-3 bg-gradient-to-r from-pink-500 to-orange-500 text-white rounded-2xl text-[11px] font-black flex items-center justify-center gap-1 cursor-pointer transition-transform hover:scale-101 shadow-sm"
+                >
+                  🍏 Apple / macOS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => saveAndExport('outlook')}
+                  className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-250 rounded-2xl text-[11px] font-black flex items-center justify-center gap-1 cursor-pointer transition-transform hover:scale-101"
+                >
+                  💻 MS Outlook
+                </button>
+                <button
+                  type="button"
+                  onClick={() => saveAndExport('ics')}
+                  className="p-3 bg-slate-900 border border-slate-950 text-white rounded-2xl text-[11px] font-black flex items-center justify-center gap-1 cursor-pointer transition-transform hover:scale-101"
+                >
+                  🤖 Android .ics
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          <div className="p-3.5 bg-slate-50 border-t border-slate-200 text-center shrink-0">
+            <button
+              onClick={() => saveAndExport('ics')}
+              className="w-full py-2.5 bg-slate-900 hover:bg-slate-850 text-white rounded-xl text-xs font-black uppercase tracking-widest cursor-pointer shadow-md"
+            >
+              Enregistrer hors-ligne & Télécharger iCal (.ics) 💾
+            </button>
+          </div>
+
+        </div>
       </div>
     );
   };
@@ -1630,6 +2337,157 @@ export default function App() {
           </div>
         </div>
 
+        {/* ESPACE CONCENTRATION ZEN & ÉLITE CLUB - MATHILDE'S PEPS GRADIENTS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-7xl mx-auto mb-8">
+          
+          {/* Card 1: Ambient Sound Instrumental Deck */}
+          <div className="bg-gradient-to-br from-slate-950 to-slate-900 p-5 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden flex flex-col justify-between">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/5 rounded-full filter blur-2xl pointer-events-none"></div>
+            <div>
+              <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5 mb-3.5">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 px-1.5 bg-pink-500/10 text-pink-500 rounded-lg text-xs leading-none">🎧</span>
+                  <h4 className="font-black text-xs uppercase text-slate-200 tracking-widest">Espace Concentration & Fond Sonore</h4>
+                </div>
+                <span className="text-[10px] text-pink-500 font-extrabold uppercase font-mono tracking-wider animate-pulse flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-pink-500"></span> Live Zen
+                </span>
+              </div>
+              
+              <p className="text-[10.5px] text-slate-400 leading-relaxed mb-4 font-medium">
+                Écoutez un bruit blanc ou un son de la nature pour vous isoler et optimiser votre attention pendant l'étude. Activer plusieurs sons crée un mixage unique !
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { key: 'rain', name: 'Pluie Douce 🌧️' },
+                  { key: 'waves', name: 'Vagues de Mer 🌊' },
+                  { key: 'birds', name: 'Vent & Oiseaux 🌲' },
+                  { key: 'fire', name: 'Feu Cheminée 🔥' }
+                ].map(sound => {
+                  const state = ambientSounds[sound.key];
+                  return (
+                    <div key={sound.key} className="p-2.5 bg-white/[0.03] border border-white/[0.06] rounded-2xl flex flex-col gap-1.5 transition-all hover:bg-white/[0.06]">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[11px] font-bold text-slate-200 select-none truncate">
+                          {sound.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setAmbientSounds(prev => ({
+                            ...prev,
+                            [sound.key]: { ...prev[sound.key], playing: !prev[sound.key].playing }
+                          }))}
+                          className={`p-1 px-2 text-[9px] font-black rounded-lg transition-all border shrink-0 cursor-pointer uppercase ${
+                            state?.playing 
+                              ? 'bg-gradient-to-r from-pink-500 to-orange-500 text-white border-transparent shadow shadow-pink-600/30' 
+                              : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {state?.playing ? 'ON 🔊' : 'OFF 🔇'}
+                        </button>
+                      </div>
+                      
+                      {state?.playing && (
+                        <div className="flex items-center gap-1.5 pt-1 animate-fadeIn">
+                          <span className="text-[8px] text-slate-505">Vol :</span>
+                          <input 
+                            type="range" 
+                            min="0" 
+                            max="1" 
+                            step="0.05" 
+                            value={state.volume} 
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              setAmbientSounds(prev => ({
+                                ...prev,
+                                [sound.key]: { ...prev[sound.key], volume: val }
+                              }));
+                            }}
+                            className="w-full h-1 accent-pink-500 bg-slate-800 rounded-lg cursor-pointer"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-white/[0.04] mt-4 flex items-center justify-between text-[9px] text-slate-500">
+              <span>💡 Les sons de fond se mélangent avec vos fichiers audio de cours.</span>
+              <span>© Mathilde Zen Space</span>
+            </div>
+          </div>
+
+          {/* Card 2: Community Elite Club Links */}
+          <div className="bg-gradient-to-br from-slate-900 to-indigo-950 p-5 rounded-3xl border border-indigo-500/10 shadow-xl relative overflow-hidden flex flex-col justify-between">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full filter blur-2xl pointer-events-none"></div>
+            <div>
+              <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5 mb-3.5">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 px-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs leading-none">💫</span>
+                  <h4 className="font-black text-xs uppercase text-slate-200 tracking-widest">Le Club Élite & Divertissement</h4>
+                </div>
+                <span className="text-[10px] text-pink-400 font-extrabold uppercase font-mono tracking-wider tracking-widest">
+                  PEP’S ENERGY ⚡
+                </span>
+              </div>
+
+              <p className="text-[10.5px] text-slate-350 leading-relaxed mb-4 font-medium">
+                Accédez directement aux serveurs communautaires et plateformes de partage pour briser l'isolement et booster votre apprentissage en joie !
+              </p>
+
+              <div className="flex flex-col gap-2.5">
+                {/* Discord Elite Club Link */}
+                <a 
+                  href="https://discord.gg/cp3DQPkXdw" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="p-3 bg-gradient-to-r from-indigo-600/60 to-[#5865F2]/80 hover:from-indigo-600 hover:to-[#5865F2] border border-indigo-500/20 text-white rounded-2xl flex items-center justify-between gap-3 shadow-md hover:scale-[1.01] transition-all cursor-pointer select-none group"
+                >
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[9px] text-indigo-200 font-extrabold block tracking-wider uppercase">GROUPE DISCORD OFFICIEL :</span>
+                    <h5 className="font-extrabold text-xs text-white truncate group-hover:underline">
+                      La Villa des Codeurs Brisés 💔 🌴 Dev Elite Club
+                    </h5>
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-indigo-200 shrink-0" />
+                </a>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* Apple music */}
+                  <a 
+                    href="https://music.apple.com/fr/new" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="p-2.5 bg-gradient-to-r from-pink-650 to-rose-650 text-white rounded-2xl flex items-center justify-between gap-2 shadow hover:opacity-95 transition-all text-[11px] font-black cursor-pointer select-none"
+                  >
+                    <span>🍎 Apple Music</span>
+                    <ExternalLink className="w-3.5 h-3.5 text-white/85 shrink-0" />
+                  </a>
+
+                  {/* YouTube Playlist */}
+                  <a 
+                    href="https://www.youtube.com/watch?v=mvbM-LauoqQ&list=PLn-G6Zl1XH-W6JOtQ3YNpgXW2qx7ig_oF" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="p-2.5 bg-gradient-to-r from-red-650 to-orange-655 text-white rounded-2xl flex items-center justify-between gap-2 shadow hover:opacity-95 transition-all text-[11px] font-black cursor-pointer select-none"
+                  >
+                    <span>📺 Playlist YouTube</span>
+                    <ExternalLink className="w-3.5 h-3.5 text-white/85 shrink-0" />
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-[9px] text-slate-500 pt-3 border-t border-white/[0.04] mt-4 font-mono">
+              ⚡ Rejoignez l'élite des codeurs pour échanger sur le devoir M-Motors.
+            </p>
+          </div>
+
+        </div>
+
         {/* INTERACTIVE STICKY MEMO STICKERS BOARD */}
         <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-5 sm:p-6 rounded-3xl border border-slate-205/80 mb-8 shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
@@ -1756,13 +2614,14 @@ export default function App() {
             </div>
 
             {/* View Mode Switcher Selectors / Buttons */}
-            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl w-full md:w-auto self-stretch md:self-auto shadow-inner">
+            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl w-full md:w-auto self-stretch md:self-auto shadow-inner overflow-x-auto no-scrollbar">
               <button
+                type="button"
                 onClick={() => {
                   setViewMode('continue');
                   triggerToast("📋 Navigation en liste continue activée", "info");
                 }}
-                className={`flex-1 md:flex-none py-1.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 md:flex-none py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${
                   viewMode === 'continue'
                     ? 'bg-slate-900 text-white shadow'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -1772,18 +2631,34 @@ export default function App() {
                 Liste Continue
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setViewMode('segmented');
                   triggerToast("🗂️ Navigation par Blocs & Modules activée", "info");
                 }}
-                className={`flex-1 md:flex-none py-1.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 md:flex-none py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${
                   viewMode === 'segmented'
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-201/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                 }`}
               >
                 <Grid className="w-3.5 h-3.5" />
-                Par Blocs & Modules
+                Par Blocs
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode('planning');
+                  triggerToast("📅 Planning des Répétitions Espacées & Rappels activé ⏳", "success");
+                }}
+                className={`flex-1 md:flex-none py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${
+                  viewMode === 'planning'
+                    ? 'bg-gradient-to-r from-pink-500 to-orange-500 text-white shadow'
+                    : 'text-slate-600 hover:text-pink-600 hover:bg-pink-100/40'
+                }`}
+              >
+                <Bell className="w-3.5 h-3.5 text-current animate-bounce-subtle" />
+                Planning & Rappels
               </button>
             </div>
             
@@ -1929,6 +2804,8 @@ export default function App() {
             <h4 className="text-base font-bold text-slate-750">Aucun cours trouvé</h4>
             <p className="text-xs text-slate-500 mt-1">Ajustez les termes de recherche, le filtre de Bloc, de Module ou le Thème de cours.</p>
           </div>
+        ) : viewMode === 'planning' ? (
+          renderPlanningView()
         ) : viewMode === 'continue' ? (
           <div className="flex flex-col gap-4">
             {filteredFiches.map(fiche => renderFicheCard(fiche))}
@@ -2284,8 +3161,8 @@ export default function App() {
                         {/* Common File (PDF) with edit / custom link options */}
                         {fiche.coursFile && (
                           <div className="p-2.5 bg-blue-500/[0.02] hover:bg-blue-500/[0.04] border border-slate-200 border-l-[3.5px] border-l-[#4285F4] rounded-xl flex flex-col gap-1.5 transition-all mb-2 shadow-sm transform hover:-translate-y-[1px]">
-                            <div className="flex items-center justify-between text-[10px] gap-2">
-                              <span className="font-bold text-slate-800 truncate flex items-center gap-1" title={fiche.coursFile}>
+                            <div className="flex items-start justify-between text-[10px] gap-2">
+                              <span className="font-bold text-slate-800 flex items-start gap-1 whitespace-normal break-all max-w-full leading-normal" title={fiche.coursFile}>
                                 📂 <span className="font-mono text-[10px] text-slate-700">{fiche.coursFile}</span>
                               </span>
                               <span className="text-[8px] text-[#4285F4] bg-blue-105 border border-blue-100 px-1.5 py-0.5 rounded-md font-sans font-black uppercase shrink-0">
@@ -2698,6 +3575,8 @@ export default function App() {
         isOpen={selectedSpeechFiche !== null}
         onClose={() => setSelectedSpeechFiche(null)}
       />
+
+      {renderReminderModal()}
     </div>
   );
 }

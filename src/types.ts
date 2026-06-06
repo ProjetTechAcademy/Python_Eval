@@ -55,3 +55,20 @@ export interface MetricCardConfig {
   color: string; // e.g. 'blue', 'red', 'yellow', 'green' (Google Colors)
   iconName: string;
 }
+
+export interface ScheduledDate {
+  label: string;
+  date: string;
+  completed: boolean;
+}
+
+export interface Reminder {
+  id: string;
+  ficheId: number;
+  ficheTitle: string;
+  topic: string;
+  type: 'spaced' | 'custom';
+  baseDate: string; // ISO / rounded J0 date
+  scheduledDates: ScheduledDate[];
+}
+

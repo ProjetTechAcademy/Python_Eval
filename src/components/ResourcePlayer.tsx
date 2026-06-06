@@ -86,7 +86,7 @@ export default function ResourcePlayer({
               {zoneBadge.text}
             </span>
           </div>
-          <h4 className="text-[11px] font-bold text-slate-800 truncate flex items-center gap-1" title={resourceName}>
+          <h4 className="text-[11px] font-bold text-slate-800 flex items-center gap-1 leading-snug whitespace-normal break-words max-w-full" title={resourceName}>
             {resourceName}
           </h4>
         </div>
