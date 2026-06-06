@@ -266,6 +266,7 @@ export default function App() {
   };
 
   const [previewHeight, setPreviewHeight] = useState<'compact' | 'large'>('compact'); // Default to compact (thinner) view as feedback requested
+  const [isFullscreenPreview, setIsFullscreenPreview] = useState<boolean>(false);
   const [elevatorExpanded, setElevatorExpanded] = useState(false); // Starts collapsed for maximum uncluttered space
   const [guideOpen, setGuideOpen] = useState<boolean>(true); // Guide panel visibility toggle
 
@@ -961,6 +962,25 @@ export default function App() {
     const isCompleted = currentStatus === 'Fait';
     const isEnCours = currentStatus === 'En cours';
 
+    // Calculate individual fiche resources progress dynamically
+    const ficheResources = getFicheResources(fiche);
+    // Explicitly add "studi" to computed resources if it's set
+    if (fiche.studi && fiche.studi.trim() !== '') {
+      if (!ficheResources.some(r => r.key === 'studi')) {
+        ficheResources.push({
+          key: 'studi',
+          type: 'studi',
+          name: "Plateforme d'études Studi",
+          url: fiche.studi,
+          zone: 'common'
+        });
+      }
+    }
+    const totalResources = ficheResources.length;
+    const seenResourcesForFiche = seenResources[fiche.id] || {};
+    const seenCount = ficheResources.filter(r => !!seenResourcesForFiche[r.key]).length;
+    const progressPct = totalResources > 0 ? Math.round((seenCount / totalResources) * 100) : 0;
+
     return (
       <div 
         key={fiche.id}
@@ -1043,6 +1063,41 @@ export default function App() {
               <h3 className="font-extrabold text-slate-900 text-sm sm:text-base md:text-lg leading-snug mt-1 text-balance">
                 {fiche.title}
               </h3>
+
+              {/* Progress bar of seen resources for this specific card */}
+              {totalResources > 0 ? (
+                <div id={`fiche-progress-container-${fiche.id}`} className="mt-3.5 flex items-center justify-between gap-3 bg-slate-50 border border-slate-200/60 p-2 px-3.5 rounded-xl shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
+                  <div className="flex items-center gap-1.1 text-[10.5px] font-extrabold text-slate-500 shrink-0 uppercase tracking-widest">
+                    <span className="text-[11px] mr-1">📊</span>Supports vus :
+                  </div>
+                  <div id={`fiche-progress-track-${fiche.id}`} className="flex-1 h-2 bg-slate-200/80 rounded-full overflow-hidden shadow-inner relative">
+                    <div 
+                      id={`fiche-progress-bar-${fiche.id}`}
+                      className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r ${
+                        progressPct === 100 
+                          ? 'from-emerald-500 to-teal-500 shadow-[0_0_8px_rgba(16,185,129,0.2)]' 
+                          : progressPct >= 50 
+                            ? 'from-indigo-500 to-blue-600' 
+                            : 'from-blue-500 to-cyan-500'
+                      }`} 
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span id={`fiche-progress-badge-${fiche.id}`} className={`text-[10px] font-black px-2 py-0.5 rounded-md font-mono shrink-0 whitespace-nowrap transition-colors duration-300 ${
+                      progressPct === 100 
+                        ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' 
+                        : 'text-indigo-750 bg-indigo-50 border border-indigo-150'
+                    }`}>
+                      👁️ {seenCount}/{totalResources} ({progressPct}%)
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div id={`fiche-progress-empty-${fiche.id}`} className="mt-3.5 text-[10px] text-slate-400 font-extrabold italic bg-slate-50/50 p-2 px-3 rounded-xl border border-dashed border-slate-200/55 flex items-center gap-1.5">
+                  📁 Aucun support requis de validation
+                </div>
+              )}
             </div>
 
             {/* Textual Actions (Immediate Action & Motors connection) placed SIDE-BY-SIDE to eliminate wasted space */}
@@ -1570,9 +1625,20 @@ export default function App() {
                   </a>
                   <button
                     onClick={() => setPreviewHeight(prev => prev === 'compact' ? 'large' : 'compact')}
-                    className="p-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-all text-[10px] flex items-center gap-1 font-extrabold cursor-pointer border border-slate-700 shadow-sm"
+                    className="p-1 px-2.5 bg-slate-850 hover:bg-slate-700 text-slate-350 rounded-lg transition-all text-[10px] flex items-center gap-1 font-bold cursor-pointer border border-slate-700 shadow-sm"
+                    title="Alterner la hauteur de la vue intégrée"
                   >
-                    {previewHeight === 'compact' ? '↕️ Mode Plein Écran' : '↕️ Mode Compact'}
+                    {previewHeight === 'compact' ? '↕️ Agrandir' : '↕️ Réduire'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsFullscreenPreview(true);
+                      triggerToast("🖥️ Mode Concentration Plein Écran Activé", "success");
+                    }}
+                    className="p-1 px-2.5 bg-gradient-to-r from-purple-600 to-indigo-650 hover:from-purple-700 hover:to-indigo-800 text-white rounded-lg transition-all text-[10px] flex items-center gap-1.5 font-extrabold cursor-pointer shadow border border-transparent hover:scale-105 active:scale-95"
+                    title="Masquer le tableau de bord pour une concentration totale"
+                  >
+                    🖥️ Plein Écran (Focus)
                   </button>
                   <button
                     onClick={() => setSelectedResourceForPreview(null)}
@@ -2748,6 +2814,119 @@ export default function App() {
         </div>
       )}
 
+      {/* FULLSCREEN FOCUS READER (QUI MASQUE TOTALEMENT LE TABLEAU DE BORD POUR CONCENTRATION ABSOLUE) */}
+      {isFullscreenPreview && selectedResourceForPreview && (
+        <div className="fixed inset-0 z-50 bg-[#090d16] flex flex-col w-screen h-screen overflow-hidden animate-fadeIn select-none">
+          {/* Top Control Bar with minimal futuristic branding for extreme focus */}
+          <div className="flex items-center justify-between px-5 py-4 bg-slate-900 border-b border-white/[0.05] text-white shrink-0 gap-4 flex-wrap sm:flex-nowrap">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-[10px] uppercase font-mono font-black tracking-widest text-[#4285F4] bg-[#4285F4]/10 px-2 py-0.5 rounded border border-[#4285F4]/15 shrink-0">
+                🖥️ MODE CONCENTRATION TOTALE (PLEIN ÉCRAN)
+              </span>
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full shrink-0 animate-pulse" />
+              <h2 className="text-xs md:text-sm font-extrabold text-slate-100 truncate max-w-xs sm:max-w-md lg:max-w-2xl" title={selectedResourceForPreview.resourceName}>
+                {selectedResourceForPreview.resourceName}
+              </h2>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Seen Toggle */}
+              {selectedResourceForPreview.resourceKey && (() => {
+                const rKey = selectedResourceForPreview.resourceKey;
+                const isSeen = !!(seenResources[selectedResourceForPreview.ficheId]?.[rKey]);
+                const seenAt = seenResources[selectedResourceForPreview.ficheId]?.[rKey];
+                return (
+                  <button
+                    onClick={() => handleToggleResourceSeen(selectedResourceForPreview.ficheId, rKey)}
+                    className={`p-1.5 px-3 rounded-lg transition-all text-[11px] flex items-center gap-1.5 font-bold border cursor-pointer select-none shadow-sm ${
+                      isSeen
+                        ? 'bg-[#34A853] text-white border-[#34A853] hover:bg-emerald-600'
+                        : 'bg-white/5 hover:bg-white/10 text-slate-350 border-white/[0.08]'
+                    }`}
+                  >
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    <span>{isSeen ? `✓ Vu le ${seenAt}` : "Marquer comme VU / LU 👁️"}</span>
+                  </button>
+                );
+              })()}
+
+              <button
+                onClick={() => {
+                  setIsFullscreenPreview(false);
+                  triggerToast("🗂️ Retour au Tableau de Bord de l'App", "info");
+                }}
+                className="p-1.5 px-4 bg-red-650 hover:bg-red-750 text-white rounded-lg transition-all text-xs font-black cursor-pointer shadow-md flex items-center gap-1.5"
+                title="Quitter le mode plein écran pour retrouver le tableau de bord"
+              >
+                <span>✕ Quitter le Plein Écran</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Core Content Viewer (Stretching fully and fluidly to utilize 100% of the screen space) */}
+          <div className="flex-1 w-full bg-black p-2 sm:p-4 flex items-center justify-center overflow-hidden">
+            {(() => {
+              const url = selectedResourceForPreview.url;
+              const ytEmbed = getYoutubeEmbedUrl(url);
+              const isDirectVideo = isDirectVideoUrl(url) || selectedResourceForPreview.type === 'video';
+              const driveEmbed = getDriveEmbedUrl(url);
+
+              if (isDirectVideo) {
+                return (
+                  <video 
+                    src={url} 
+                    className="w-full h-full max-h-full bg-black object-contain focus:outline-none rounded-xl border border-white/[0.05]" 
+                    controls 
+                    autoPlay 
+                    playsInline
+                  />
+                );
+              }
+
+              if (ytEmbed) {
+                return (
+                  <iframe 
+                    src={ytEmbed} 
+                    className="w-full h-full border-0 bg-slate-950 rounded-xl" 
+                    allow="autoplay; encrypted-media; picture-in-picture"
+                    allowFullScreen
+                    title="YouTube Fullscreen Preview"
+                  />
+                );
+              }
+
+              if (driveEmbed) {
+                return (
+                  <iframe 
+                    src={driveEmbed} 
+                    className="w-full h-full border-0 bg-slate-950 rounded-xl" 
+                    allow="autoplay; encrypted-media"
+                    title="Google Drive Document Fullscreen Preview"
+                  />
+                );
+              }
+
+              return (
+                <div className="p-8 text-center text-slate-300 bg-slate-900 rounded-3xl border border-white/[0.05] flex flex-col items-center justify-center max-w-md shadow-2xl">
+                  <span className="text-4xl mb-3">⚠️</span>
+                  <h5 className="font-bold text-base text-slate-100">Intégration directe non supportée</h5>
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">Ce fichier externe requiert une authentification dans votre navigateur ou ne permet pas l'inclusion en iFrame.</p>
+                  <a 
+                    href={url} 
+                    target="_blank" 
+                    referrerPolicy="no-referrer"
+                    rel="noopener noreferrer" 
+                    className="mt-5 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow"
+                  >
+                    Ouvrir dans un nouvel onglet <ExternalLink className="w-4 h-4" />
+                  </a>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* Styled Top Branding Google colors bar */}
       <div className="w-full h-2 flex">
         <div className="w-1/4 h-full bg-[#4285F4]" />
@@ -2767,22 +2946,30 @@ export default function App() {
           </div>
           
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="bg-[#4285F4]/10 text-[#4285F4] text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 border border-[#4285F4]/20 animate-pulse">
-                  <Flame className="w-3.5 h-3.5" /> Dossier M-Motors
-                </span>
-                <span className="text-slate-400 text-xs font-semibold uppercase tracking-widest">Python B3 Module</span>
-              </div>
+            <div className="flex items-center gap-4">
+              <img 
+                src="https://projettechacademy.github.io/Projet_Python/Asset/2127845D-F95D-49C0-A22B-88C07817841B.png" 
+                alt="Logo PAIA Header" 
+                referrerPolicy="no-referrer"
+                className="w-16 h-16 rounded-2xl object-cover border border-slate-150 shadow-sm shrink-0 hidden sm:block hover:scale-105 transition-all duration-300" 
+              />
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="bg-[#4285F4]/10 text-[#4285F4] text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 border border-[#4285F4]/20 animate-pulse">
+                    <Flame className="w-3.5 h-3.5" /> Dossier M-Motors
+                  </span>
+                  <span className="text-slate-400 text-xs font-semibold uppercase tracking-widest">Python B3 Module</span>
+                </div>
               <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
                 Suivi de Progression : Zone Évaluation vs Jury 🎓🏁
               </h1>
               <p className="text-sm text-slate-500 mt-1 max-w-2xl">
                 Comparez, révisez et gérez vos fiches de cours à double objectifs: 
                 <span className="font-semibold text-blue-600"> Zone A (Vos progrès)</span> et 
-                <span className="font-semibold text-red-600"> Zone B (Avis & Réponses Jury)</span> sur le même tableau.
+                <span className="font-semibold text-red-650"> Zone B (Avis & Réponses Jury)</span> sur le même tableau.
               </p>
             </div>
+          </div>
             
             <div className="flex flex-wrap items-center gap-3">
               <button
@@ -4656,14 +4843,42 @@ export default function App() {
       </main>
 
       {/* Modern Compact Floating Navigation Footer */}
-      <footer className="mt-20 border-t border-slate-200 py-10 bg-white text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="flex items-center gap-1.5">
-            <span className="font-extrabold text-slate-800">Tableau de bord M-Motors</span>
-            <span className="px-2 py-0.5 font-bold rounded-full bg-slate-100 text-slate-500 font-mono text-[10px]">v1.2.0 • Bento Theme</span>
-          </p>
-          <p className="flex items-center gap-1.5 justify-center text-slate-450">
-            Amélioré avec amour <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500 shrink-0" /> pour Mathilde
+      <footer className="mt-20 border-t border-slate-200 py-12 bg-white text-center">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col items-center justify-center gap-5">
+          {/* Footer Logo of PAIA and MMPA centered */}
+          <div className="flex items-center justify-center gap-5">
+            <img 
+              src="https://projettechacademy.github.io/Projet_Python/Asset/Logo_MMPA.jpeg" 
+              alt="Logo MMPA" 
+              referrerPolicy="no-referrer"
+              className="h-14 rounded-xl border border-slate-150 shadow-sm object-contain hover:scale-105 transition-transform"
+            />
+            <div className="w-px h-8 bg-slate-350" />
+            <img 
+              src="https://projettechacademy.github.io/Projet_Python/Asset/2127845D-F95D-49C0-A22B-88C07817841B.png" 
+              alt="Logo PAIA Footer" 
+              referrerPolicy="no-referrer"
+              className="h-14 rounded-xl border border-slate-150 shadow-sm object-contain hover:scale-105 transition-transform"
+            />
+          </div>
+
+          {/* Centered single line footer text */}
+          <p className="text-[11px] sm:text-xs font-bold text-slate-600 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 select-none text-center leading-normal">
+            <span>💫 PAIA – Plateforme d’Actualisation & d’Information (IA) 💔</span>
+            <span className="text-slate-350 hidden md:inline">|</span>
+            <span>🌴 By Mathilde Martine PAISLEY 🌹</span>
+            <span className="text-slate-350 hidden md:inline">|</span>
+            <a 
+              href="https://discord.gg/jnnNbNaGMp" 
+              target="_blank" 
+              referrerPolicy="no-referrer"
+              rel="noopener noreferrer" 
+              className="text-[#4285F4] hover:text-blue-800 hover:underline transition-colors animate-pulse"
+            >
+              Support Discord 💬
+            </a>
+            <span className="text-slate-350 hidden md:inline">|</span>
+            <span className="text-slate-400 font-medium">© 2026 Tous droits réservés</span>
           </p>
         </div>
       </footer>
