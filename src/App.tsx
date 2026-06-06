@@ -181,7 +181,89 @@ export default function App() {
     url: string;
     type: string;
     ficheId: number;
+    resourceKey?: string;
   } | null>(null);
+
+  interface ResourceInfo {
+    key: string;
+    type: string;
+    name: string;
+    url: string;
+    zone: 'A' | 'B' | 'C' | 'common';
+  }
+
+  const getFicheResources = (f: Fiche): ResourceInfo[] => {
+    const list: ResourceInfo[] = [];
+    if (f.coursFile) {
+      list.push({
+        key: 'coursFile',
+        type: 'slide',
+        name: f.coursFile,
+        url: f.coursFileUrl || (f.coursFile.startsWith('http') ? f.coursFile : ''),
+        zone: 'common'
+      });
+    }
+    if (f.audio1) list.push({ key: 'audio1', type: 'audio', name: "Vocal d'évaluation (.m4a)", url: f.audio1, zone: 'A' });
+    if (f.slide1) list.push({ key: 'slide1', type: 'slide', name: "Slides Présentation", url: f.slide1, zone: 'A' });
+    if (f.video1) list.push({ key: 'video1', type: 'video', name: "Vidéo Explicative", url: f.video1, zone: 'A' });
+    if (f.image1) list.push({ key: 'image1', type: 'image', name: "Schémas d'Appuis", url: f.image1, zone: 'A' });
+    if (f.nblm1) list.push({ key: 'nblm1', type: 'nblm', name: "NotebookLM d'Appuis IA", url: f.nblm1, zone: 'A' });
+
+    if (f.audio2) list.push({ key: 'audio2', type: 'audio', name: "Vocal Soutenance (.m4a)", url: f.audio2, zone: 'B' });
+    if (f.slide2) list.push({ key: 'slide2', type: 'slide', name: "Slides Réponses Jury", url: f.slide2, zone: 'B' });
+    if (f.video2) list.push({ key: 'video2', type: 'video', name: "Vidéo Démonstration Jury", url: f.video2, zone: 'B' });
+    if (f.image2) list.push({ key: 'image2', type: 'image', name: "Preuves & Graphiques d'Appui", url: f.image2, zone: 'B' });
+    if (f.nblm2) list.push({ key: 'nblm2', type: 'nblm', name: "NotebookLM Réponses Jury", url: f.nblm2, zone: 'B' });
+
+    if (f.audio3) list.push({ key: 'audio3', type: 'audio', name: "Vocal Commun (.m4a)", url: f.audio3, zone: 'C' });
+    if (f.slide3) list.push({ key: 'slide3', type: 'slide', name: "Slides Base Commune", url: f.slide3, zone: 'C' });
+    if (f.video3) list.push({ key: 'video3', type: 'video', name: "Vidéo Explicative Commune", url: f.video3, zone: 'C' });
+    if (f.image3) list.push({ key: 'image3', type: 'image', name: "Iconographies Communes", url: f.image3, zone: 'C' });
+    if (f.nblm3) list.push({ key: 'nblm3', type: 'nblm', name: "NotebookLM Références Communes", url: f.nblm3, zone: 'C' });
+
+    return list.filter(r => r.url && r.url !== '');
+  };
+
+  const [seenResources, setSeenResources] = useState<Record<number, Record<string, string>>>(() => {
+    const local = localStorage.getItem('m-motors-seen-resources2');
+    if (local) {
+      try {
+        return JSON.parse(local);
+      } catch (e) {
+        return {};
+      }
+    }
+    return {};
+  });
+
+  const handleToggleResourceSeen = (ficheId: number, resourceKey: string) => {
+    setSeenResources(prev => {
+      const next = { ...prev };
+      if (!next[ficheId]) {
+        next[ficheId] = {};
+      }
+      if (next[ficheId][resourceKey]) {
+        delete next[ficheId][resourceKey];
+        if (Object.keys(next[ficheId]).length === 0) {
+          delete next[ficheId];
+        }
+        triggerToast("Document marqué comme non lu/vu ⭕", "info");
+      } else {
+        const now = new Date();
+        const formattedDate = now.toLocaleDateString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        next[ficheId][resourceKey] = formattedDate;
+        triggerToast("Document marqué comme assimilé ! ✔", "success");
+      }
+      localStorage.setItem('m-motors-seen-resources2', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const [previewHeight, setPreviewHeight] = useState<'compact' | 'large'>('compact'); // Default to compact (thinner) view as feedback requested
   const [elevatorExpanded, setElevatorExpanded] = useState(false); // Starts collapsed for maximum uncluttered space
@@ -644,6 +726,69 @@ export default function App() {
   // Domain Category listing
   const topics = ['All', 'HTML & CSS', 'Bootstrap', 'Bases de Données', 'Python Backend', 'Python Quality & Flask', 'APIs, Git & Sécurité'];
 
+  // Calculate detailed progress for documents that have been marked as seen
+  const resourceProgressStats = useMemo(() => {
+    const stats = {
+      byTopic: {} as Record<string, { total: number; seen: number; pct: number }>,
+      byBlock: {} as Record<string, { total: number; seen: number; pct: number }>,
+      byModule: {} as Record<string, { total: number; seen: number; pct: number }>,
+      global: { total: 0, seen: 0, pct: 0 }
+    };
+
+    topics.forEach(t => {
+      if (t !== 'All') {
+        stats.byTopic[t] = { total: 0, seen: 0, pct: 0 };
+      }
+    });
+
+    fiches.forEach(f => {
+      const title = f.title || '';
+      const bMatch = title.match(/(?:_|\b)B(\d+)(?:_|\b)/i);
+      const mMatch = title.match(/(?:_|\b)M(\d+)(?:_|\b)/i);
+      const blockCode = bMatch ? `B${bMatch[1]}` : 'Autre';
+      const moduleCode = mMatch ? `M${mMatch[1]}` : 'Autre';
+
+      if (!stats.byBlock[blockCode]) {
+        stats.byBlock[blockCode] = { total: 0, seen: 0, pct: 0 };
+      }
+      if (!stats.byModule[moduleCode]) {
+        stats.byModule[moduleCode] = { total: 0, seen: 0, pct: 0 };
+      }
+
+      const resources = getFicheResources(f);
+      const seenMap = seenResources[f.id] || {};
+
+      resources.forEach(r => {
+        const isSeen = !!seenMap[r.key];
+        
+        if (stats.byTopic[f.topic]) {
+          stats.byTopic[f.topic].total++;
+          if (isSeen) stats.byTopic[f.topic].seen++;
+        }
+
+        stats.byBlock[blockCode].total++;
+        if (isSeen) stats.byBlock[blockCode].seen++;
+
+        stats.byModule[moduleCode].total++;
+        if (isSeen) stats.byModule[moduleCode].seen++;
+
+        stats.global.total++;
+        if (isSeen) stats.global.seen++;
+      });
+    });
+
+    const calcPct = (item: { total: number; seen: number; pct: number }) => {
+      item.pct = item.total > 0 ? Math.round((item.seen / item.total) * 100) : 0;
+    };
+
+    Object.values(stats.byTopic).forEach(calcPct);
+    Object.values(stats.byBlock).forEach(calcPct);
+    Object.values(stats.byModule).forEach(calcPct);
+    calcPct(stats.global);
+
+    return stats;
+  }, [fiches, seenResources]);
+
   // Fiches that are filtered ONLY by block and module (not topic, search or status)
   const fichesFilteredOnlyByBlockAndModule = useMemo(() => {
     return fichesFilteredByZone.filter(f => {
@@ -974,75 +1119,101 @@ export default function App() {
               </p>
               
               {/* Common File (PDF) with edit / custom link options */}
-              {fiche.coursFile && (
-                <div className="p-2.5 bg-blue-500/[0.02] hover:bg-blue-500/[0.04] border border-slate-200 border-l-[3.5px] border-l-[#4285F4] rounded-xl flex flex-col gap-1.5 transition-all mb-2 shadow-sm transform hover:-translate-y-[1px]">
-                  <div className="flex items-start justify-between text-[10px] gap-2">
-                    <span className="font-bold text-slate-800 flex items-start gap-1 whitespace-normal break-all max-w-full leading-normal" title={fiche.coursFile}>
-                      📂 <span className="font-mono text-[10px] text-slate-705">{fiche.coursFile}</span>
-                    </span>
-                    <span className="text-[8px] text-[#4285F4] bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md font-sans font-black uppercase shrink-0">
-                      Support PDF
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
-                    {fiche.coursFileUrl || fiche.coursFile.startsWith('http') ? (
-                      <button
-                        onClick={() => setSelectedResourceForPreview({
-                          title: fiche.title,
-                          resourceName: fiche.coursFile || "Document PDF de Support d'Étude",
-                          url: fiche.coursFileUrl || fiche.coursFile,
-                          type: 'slide',
-                          ficheId: fiche.id
-                        })}
-                        className="p-0.5 px-2.5 bg-[#4285F4] hover:bg-blue-600 text-white rounded-md transition-all text-[10px] flex items-center gap-1 font-bold cursor-pointer hover:scale-105 active:scale-95"
-                      >
-                        <span>👁️ Lire Support</span>
-                      </button>
-                    ) : (
-                      <span className="text-[9px] text-slate-400 italic">Lien non configuré</span>
-                    )}
-
-                    <button
-                      onClick={() => setEditingPdfFicheId(editingPdfFicheId === fiche.id ? null : fiche.id)}
-                      className="text-[8px] text-blue-600 hover:text-blue-755 font-extrabold hover:underline transition-all"
-                    >
-                      {fiche.coursFileUrl || fiche.coursFile.startsWith('http') ? '✏️ Modifier' : '🔗 Lier un PDF'}
-                    </button>
-                  </div>
-
-                  {/* Quick inline URL associator */}
-                  {editingPdfFicheId === fiche.id && (
-                    <div className="pt-2 border-t border-slate-200 text-[10px] flex flex-col gap-1 bento-pop bg-slate-50 p-2 rounded-xl border">
-                      <p className="font-semibold text-slate-700">Lien Google Drive du PDF :</p>
-                      <div className="flex gap-1.5">
-                        <input 
-                          type="text" 
-                          placeholder="https://drive.google.com/..." 
-                          id={`input-pdf-link-${fiche.id}`}
-                          defaultValue={fiche.coursFileUrl || (fiche.coursFile.startsWith('http') ? fiche.coursFile : '')}
-                          className="flex-1 p-1 px-2 text-[10px] bg-white border border-slate-250 rounded-md focus:border-blue-500 focus:outline-none text-slate-800"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              const val = e.currentTarget.value;
-                              if (val) handleAssignPdfUrl(fiche.id, val);
-                            }
+              {fiche.coursFile && (() => {
+                const isSeen = !!(seenResources[fiche.id]?.coursFile);
+                const seenAt = seenResources[fiche.id]?.coursFile;
+                return (
+                  <div className={`p-2.5 bg-blue-500/[0.02] hover:bg-blue-500/[0.04] border border-slate-200 border-l-[3.5px] border-l-[#4285F4] rounded-xl flex flex-col gap-1.5 transition-all mb-2 shadow-sm transform hover:-translate-y-[1px] ${isSeen ? 'bg-emerald-500/[0.04] border-emerald-200' : ''}`}>
+                    <div className="flex items-start justify-between text-[10px] gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleResourceSeen(fiche.id, 'coursFile');
                           }}
-                        />
-                        <button 
-                          onClick={() => {
-                            const el = document.getElementById(`input-pdf-link-${fiche.id}`) as HTMLInputElement;
-                            if (el && el.value) handleAssignPdfUrl(fiche.id, el.value);
-                          }}
-                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[10px] font-bold shrink-0 transition-colors cursor-pointer"
+                          className={`w-4.5 h-4.5 rounded-full border flex items-center justify-center shrink-0 cursor-pointer transition-all duration-300 ${
+                            isSeen 
+                              ? 'bg-[#34A853] border-[#34A853] text-white hover:bg-emerald-600 shadow-sm' 
+                              : 'border-slate-300 hover:border-[#34A853] hover:bg-emerald-50 text-transparent'
+                          }`}
+                          title={isSeen ? `Pris connaissance le ${seenAt}. Cliquer pour marquer comme non lu.` : "Marquer ce document PDF comme lu"}
                         >
-                          OK
+                          <Check className="w-3 h-3 stroke-[3.5]" />
                         </button>
+                        <span className="font-bold text-slate-800 flex flex-col gap-0.5 whitespace-normal break-all max-w-full leading-normal" title={fiche.coursFile}>
+                          <span className="font-mono text-[10px] text-slate-705">📂 {fiche.coursFile}</span>
+                          {isSeen && seenAt && (
+                            <span className="text-[8.5px] font-sans font-extrabold text-emerald-700 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/10 flex items-center gap-0.5 mt-0.5 w-fit select-none font-sans">
+                              👁️ Lu le {seenAt}
+                            </span>
+                          )}
+                        </span>
                       </div>
+                      <span className="text-[8px] text-[#4285F4] bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md font-sans font-black uppercase shrink-0">
+                        Support PDF
+                      </span>
                     </div>
-                  )}
-                </div>
-              )}
+
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                      {fiche.coursFileUrl || fiche.coursFile.startsWith('http') ? (
+                        <button
+                          onClick={() => setSelectedResourceForPreview({
+                            title: fiche.title,
+                            resourceName: fiche.coursFile || "Document PDF de Support d'Étude",
+                            url: fiche.coursFileUrl || fiche.coursFile,
+                            type: 'slide',
+                            ficheId: fiche.id,
+                            resourceKey: 'coursFile'
+                          })}
+                          className="p-0.5 px-2.5 bg-[#4285F4] hover:bg-blue-600 text-white rounded-md transition-all text-[10px] flex items-center gap-1 font-bold cursor-pointer hover:scale-105 active:scale-95"
+                        >
+                          <span>👁️ Lire Support</span>
+                        </button>
+                      ) : (
+                        <span className="text-[9px] text-slate-400 italic">Lien non configuré</span>
+                      )}
+
+                      <button
+                        onClick={() => setEditingPdfFicheId(editingPdfFicheId === fiche.id ? null : fiche.id)}
+                        className="text-[8px] text-blue-600 hover:text-blue-755 font-extrabold hover:underline transition-all"
+                      >
+                        {fiche.coursFileUrl || fiche.coursFile.startsWith('http') ? '✏️ Modifier' : '🔗 Lier un PDF'}
+                      </button>
+                    </div>
+
+                    {/* Quick inline URL associator */}
+                    {editingPdfFicheId === fiche.id && (
+                      <div className="pt-2 border-t border-slate-200 text-[10px] flex flex-col gap-1 bento-pop bg-slate-50 p-2 rounded-xl border">
+                        <p className="font-semibold text-slate-700">Lien Google Drive du PDF :</p>
+                        <div className="flex gap-1.5">
+                          <input 
+                            type="text" 
+                            placeholder="https://drive.google.com/..." 
+                            id={`input-pdf-link-${fiche.id}`}
+                            defaultValue={fiche.coursFileUrl || (fiche.coursFile.startsWith('http') ? fiche.coursFile : '')}
+                            className="flex-1 p-1 px-2 text-[10px] bg-white border border-slate-250 rounded-md focus:border-blue-500 focus:outline-none text-slate-800"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const val = e.currentTarget.value;
+                                if (val) handleAssignPdfUrl(fiche.id, val);
+                              }
+                            }}
+                          />
+                          <button 
+                            onClick={() => {
+                              const el = document.getElementById(`input-pdf-link-${fiche.id}`) as HTMLInputElement;
+                              if (el && el.value) handleAssignPdfUrl(fiche.id, el.value);
+                            }}
+                            className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[10px] font-bold shrink-0 transition-colors cursor-pointer"
+                          >
+                            OK
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Display ONLY activeZone resource block */}
               <div>
@@ -1064,6 +1235,10 @@ export default function App() {
                             type="audio" 
                             zone="A" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="audio1"
+                            isSeen={!!(seenResources[fiche.id]?.audio1)}
+                            seenAt={seenResources[fiche.id]?.audio1}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                         {fiche.slide1 && (
@@ -1075,6 +1250,10 @@ export default function App() {
                             type="slide" 
                             zone="A" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="slide1"
+                            isSeen={!!(seenResources[fiche.id]?.slide1)}
+                            seenAt={seenResources[fiche.id]?.slide1}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                         {fiche.video1 && (
@@ -1086,6 +1265,10 @@ export default function App() {
                             type="video" 
                             zone="A" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="video1"
+                            isSeen={!!(seenResources[fiche.id]?.video1)}
+                            seenAt={seenResources[fiche.id]?.video1}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                         {fiche.image1 && (
@@ -1097,6 +1280,10 @@ export default function App() {
                             type="image" 
                             zone="A" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="image1"
+                            isSeen={!!(seenResources[fiche.id]?.image1)}
+                            seenAt={seenResources[fiche.id]?.image1}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                         {fiche.nblm1 && (
@@ -1108,6 +1295,10 @@ export default function App() {
                             type="nblm" 
                             zone="A" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="nblm1"
+                            isSeen={!!(seenResources[fiche.id]?.nblm1)}
+                            seenAt={seenResources[fiche.id]?.nblm1}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                       </div>
@@ -1133,6 +1324,10 @@ export default function App() {
                             type="audio" 
                             zone="B" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="audio2"
+                            isSeen={!!(seenResources[fiche.id]?.audio2)}
+                            seenAt={seenResources[fiche.id]?.audio2}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                         {fiche.slide2 && (
@@ -1144,6 +1339,10 @@ export default function App() {
                             type="slide" 
                             zone="B" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="slide2"
+                            isSeen={!!(seenResources[fiche.id]?.slide2)}
+                            seenAt={seenResources[fiche.id]?.slide2}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                         {fiche.video2 && (
@@ -1155,6 +1354,10 @@ export default function App() {
                             type="video" 
                             zone="B" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="video2"
+                            isSeen={!!(seenResources[fiche.id]?.video2)}
+                            seenAt={seenResources[fiche.id]?.video2}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                         {fiche.image2 && (
@@ -1166,6 +1369,10 @@ export default function App() {
                             type="image" 
                             zone="B" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="image2"
+                            isSeen={!!(seenResources[fiche.id]?.image2)}
+                            seenAt={seenResources[fiche.id]?.image2}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                         {fiche.nblm2 && (
@@ -1177,6 +1384,10 @@ export default function App() {
                             type="nblm" 
                             zone="B" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="nblm2"
+                            isSeen={!!(seenResources[fiche.id]?.nblm2)}
+                            seenAt={seenResources[fiche.id]?.nblm2}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                       </div>
@@ -1202,6 +1413,10 @@ export default function App() {
                             type="audio" 
                             zone="C" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="audio3"
+                            isSeen={!!(seenResources[fiche.id]?.audio3)}
+                            seenAt={seenResources[fiche.id]?.audio3}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                         {fiche.slide3 && (
@@ -1213,6 +1428,10 @@ export default function App() {
                             type="slide" 
                             zone="C" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="slide3"
+                            isSeen={!!(seenResources[fiche.id]?.slide3)}
+                            seenAt={seenResources[fiche.id]?.slide3}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                         {fiche.video3 && (
@@ -1224,6 +1443,10 @@ export default function App() {
                             type="video" 
                             zone="C" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="video3"
+                            isSeen={!!(seenResources[fiche.id]?.video3)}
+                            seenAt={seenResources[fiche.id]?.video3}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                         {fiche.image3 && (
@@ -1235,6 +1458,10 @@ export default function App() {
                             type="image" 
                             zone="C" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="image3"
+                            isSeen={!!(seenResources[fiche.id]?.image3)}
+                            seenAt={seenResources[fiche.id]?.image3}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                         {fiche.nblm3 && (
@@ -1246,6 +1473,10 @@ export default function App() {
                             type="nblm" 
                             zone="C" 
                             onPreviewInApp={setSelectedResourceForPreview}
+                            resourceKey="nblm3"
+                            isSeen={!!(seenResources[fiche.id]?.nblm3)}
+                            seenAt={seenResources[fiche.id]?.nblm3}
+                            onToggleSeen={handleToggleResourceSeen}
                           />
                         )}
                       </div>
@@ -1266,6 +1497,10 @@ export default function App() {
                   type="studi" 
                   zone="common" 
                   onPreviewInApp={setSelectedResourceForPreview}
+                  resourceKey="studi"
+                  isSeen={!!(seenResources[fiche.id]?.studi)}
+                  seenAt={seenResources[fiche.id]?.studi}
+                  onToggleSeen={handleToggleResourceSeen}
                 />
               </div>
             )}
@@ -1298,6 +1533,25 @@ export default function App() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                  {selectedResourceForPreview.resourceKey && (() => {
+                    const rKey = selectedResourceForPreview.resourceKey;
+                    const isSeen = !!(seenResources[fiche.id]?.[rKey]);
+                    const seenAt = seenResources[fiche.id]?.[rKey];
+                    return (
+                      <button
+                        onClick={() => handleToggleResourceSeen(fiche.id, rKey)}
+                        className={`p-1 px-2.5 rounded-lg transition-all text-[10px] flex items-center gap-1 font-bold border cursor-pointer select-none ${
+                          isSeen
+                            ? 'bg-[#34A853] text-white border-[#34A853] hover:bg-emerald-600'
+                            : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/[0.08]'
+                        }`}
+                        title={isSeen ? `Vu le ${seenAt}. Cliquer pour enlever.` : "Marquer ce document comme lu/vu"}
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>{isSeen ? `✓ Vu le ${seenAt}` : "Marquer comme VU / LU 👁️"}</span>
+                      </button>
+                    );
+                  })()}
                   <button
                     onClick={() => setSelectedSpeechFiche(fiche)}
                     className="p-1 px-2.5 bg-gradient-to-r from-[#4285F4] to-indigo-650 hover:from-blue-600 hover:to-indigo-750 text-white rounded-lg transition-all text-[10px] flex items-center gap-1 font-bold border border-transparent shadow hover:scale-105 active:scale-95 cursor-pointer select-none"
@@ -2865,6 +3119,123 @@ export default function App() {
 
         </div>
 
+        {/* RESOURCE SEEN PROGRESSION DASHBOARD (MATHILDE'S PERSONAL TRACKER) */}
+        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-5 rounded-3xl border border-slate-800 shadow-xl mb-8 flex flex-col gap-5 text-white font-sans animate-fadeIn">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.08] pb-4">
+            <div>
+              <span className="text-[10px] uppercase font-mono tracking-widest text-[#4285F4] font-bold block">
+                🎯 SUIVI DE PRISE DE CONNAISSANCE DE MATHILDE (VU/LU)
+              </span>
+              <h3 className="text-lg md:text-xl font-black text-slate-100 mt-1 flex items-center gap-2">
+                📂 Progression des Supports par Matière, Bloc & Module
+              </h3>
+            </div>
+            <div className="bg-emerald-500/10 px-4 py-1.5 rounded-2xl border border-emerald-500/20 text-right shrink-0">
+              <span className="text-xs text-slate-400 block font-bold">Total Assimilé 👁️</span>
+              <span className="text-xl font-black text-[#5fc480]">{resourceProgressStats.global.pct}%</span>
+              <span className="text-[10px] text-slate-300 block font-mono">({resourceProgressStats.global.seen} / {resourceProgressStats.global.total} docs)</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            {/* 1. PROGRESS BY SUBJECT */}
+            <div className="bg-white/[0.02] p-4 rounded-2xl border border-white/[0.05] hover:border-white/[0.1] transition-all flex flex-col gap-4">
+              <h4 className="font-extrabold text-xs tracking-wider uppercase text-slate-300 flex items-center gap-1.5 border-b border-white/[0.05] pb-2">
+                📚 PAR MATIÈRE
+              </h4>
+              <div className="flex flex-col gap-3.5 flex-1 overflow-y-auto max-h-[300px] pr-1 scrollbar-thin">
+                {(Object.entries(resourceProgressStats.byTopic) as [string, { total: number; seen: number; pct: number }][]).map(([topic, stat]) => (
+                  <div key={topic} className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+                      <span className="truncate max-w-[150px] sm:max-w-[180px] lg:max-w-[200px]" title={topic}>{topic}</span>
+                      <span className="font-mono text-[#4285F4]">{stat.pct}% <span className="text-[10px] text-slate-450 font-normal">({stat.seen}/{stat.total})</span></span>
+                    </div>
+                    <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden border border-white/[0.05]">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          stat.pct === 100 ? 'bg-[#34A853]' : stat.pct >= 50 ? 'bg-[#FBBC05]' : 'bg-[#4285F4]'
+                        }`}
+                        style={{ width: `${stat.pct}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. PROGRESS BY BLOCK */}
+            <div className="bg-white/[0.02] p-4 rounded-2xl border border-white/[0.05] hover:border-white/[0.1] transition-all flex flex-col gap-4">
+              <h4 className="font-extrabold text-xs tracking-wider uppercase text-slate-300 flex items-center gap-1.5 border-b border-white/[0.05] pb-2">
+                🧱 PAR BLOC D'ÉTUDE
+              </h4>
+              <div className="flex flex-col gap-3.5 flex-1 overflow-y-auto max-h-[300px] pr-1 scrollbar-thin">
+                {(Object.entries(resourceProgressStats.byBlock) as [string, { total: number; seen: number; pct: number }][])
+                  .sort((a, b) => {
+                    if (a[0] === 'Autre') return 1;
+                    if (b[0] === 'Autre') return -1;
+                    return a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' });
+                  })
+                  .map(([block, stat]) => (
+                    <div key={block} className="flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+                        <span>{block === 'Autre' ? 'Hors Blocs' : `Bloc ${block.replace('B', '')}`}</span>
+                        <span className="font-mono text-[#4285F4]">{stat.pct}% <span className="text-[10px] text-slate-450 font-normal">({stat.seen}/{stat.total})</span></span>
+                      </div>
+                      <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden border border-white/[0.05]">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            stat.pct === 100 ? 'bg-[#34A853]' : stat.pct >= 50 ? 'bg-[#FBBC05]' : 'bg-[#4285F4]'
+                          }`}
+                          style={{ width: `${stat.pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* 3. PROGRESS BY MODULE */}
+            <div className="bg-white/[0.02] p-4 rounded-2xl border border-white/[0.05] hover:border-white/[0.1] transition-all flex flex-col gap-4">
+              <h4 className="font-extrabold text-xs tracking-wider uppercase text-slate-300 flex items-center gap-1.5 border-b border-white/[0.05] pb-2">
+                📦 PAR MODULE
+              </h4>
+              <div className="flex flex-col gap-3.5 flex-1 overflow-y-auto max-h-[300px] pr-1 scrollbar-thin">
+                {(Object.entries(resourceProgressStats.byModule) as [string, { total: number; seen: number; pct: number }][])
+                  .sort((a, b) => {
+                    if (a[0] === 'Autre') return 1;
+                    if (b[0] === 'Autre') return -1;
+                    return a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' });
+                  })
+                  .map(([mod, stat]) => (
+                    <div key={mod} className="flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+                        <span>{mod === 'Autre' ? 'Autre' : `Module ${mod.replace('M', '')}`}</span>
+                        <span className="font-mono text-[#4285F4]">{stat.pct}% <span className="text-[10px] text-slate-450 font-normal">({stat.seen}/{stat.total})</span></span>
+                      </div>
+                      <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden border border-white/[0.05]">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            stat.pct === 105 || stat.pct === 100 ? 'bg-[#34A853]' : stat.pct >= 50 ? 'bg-[#FBBC05]' : 'bg-[#4285F4]'
+                          }`}
+                          style={{ width: `${stat.pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+          </div>
+
+          <div className="bg-white/[0.03] p-3 text-xs rounded-xl border border-white/[0.05] text-slate-300 flex items-start gap-2 max-w-full leading-normal">
+            <span className="text-base select-none shrink-0">💡</span>
+            <p>
+              <strong>Suivi autonome fusionné</strong> : Cochez l'icône cercle <span className="inline-flex items-center justify-center w-3 h-3 rounded-full border border-slate-300 text-[8px] font-bold">✓</span> à gauche d'un document, ou cliquez sur le bouton de prise de connaissance dans le lisseur. Tout est croisé et calculé en direct, peu importe laquelle des 3 Zones est active !
+            </p>
+          </div>
+        </div>
+
         {/* 2. DYNAMIC TREND TREND TRACKER CHARTS */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
           
@@ -3336,6 +3707,20 @@ export default function App() {
                     className={`p-1.5 px-3 rounded-xl text-[11px] font-extrabold cursor-pointer transition-all duration-300 flex items-center gap-1.5 transform active:scale-95 border border-transparent ${getAccentClass()}`}
                   >
                     <span>{t === 'All' ? 'Tous 🗺️' : t}</span>
+                    {resourceProgressStats.global && resourceProgressStats.global.total > 0 && t === 'All' && (
+                      <span className={`text-[9.5px] font-bold px-1 rounded ${
+                        isSelected ? 'bg-black/25 text-emerald-300' : 'bg-emerald-50 text-emerald-700'
+                      }`} title={`${resourceProgressStats.global.seen}/${resourceProgressStats.global.total} documents consultés`}>
+                        👁️ {resourceProgressStats.global.pct}%
+                      </span>
+                    )}
+                    {t !== 'All' && resourceProgressStats.byTopic[t] && resourceProgressStats.byTopic[t].total > 0 && (
+                      <span className={`text-[9.5px] font-bold px-1 rounded ${
+                        isSelected ? 'bg-black/25 text-emerald-300' : 'bg-emerald-50 text-emerald-700'
+                      }`} title={`${resourceProgressStats.byTopic[t].seen}/${resourceProgressStats.byTopic[t].total} documents consultés`}>
+                        👁️ {resourceProgressStats.byTopic[t].pct}%
+                      </span>
+                    )}
                     <span className={`px-1.5 py-0.2 text-[9px] font-black rounded-full leading-none flex items-center justify-center ${
                       isSelected ? 'bg-white/20 text-white' : 'bg-slate-205 text-slate-750'
                     }`}>
@@ -3473,6 +3858,21 @@ export default function App() {
                         <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
                           {totalCountInBlock} {totalCountInBlock > 1 ? 'fiches d\'études' : 'fiche d\'étude'} sous ce bloc
                         </p>
+                        
+                        {/* Elegant Progress bar for block-level seen documents */}
+                        {resourceProgressStats.byBlock[group.blockCode] && resourceProgressStats.byBlock[group.blockCode].total > 0 && (
+                          <div className="mt-2 flex items-center gap-3 w-64 sm:w-80">
+                            <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                              <div 
+                                className="h-full bg-purple-600 rounded-full transition-all duration-500" 
+                                style={{ width: `${resourceProgressStats.byBlock[group.blockCode].pct}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] font-black text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-500/10 font-mono">
+                              👁️ {resourceProgressStats.byBlock[group.blockCode].seen}/{resourceProgressStats.byBlock[group.blockCode].total} documents ({resourceProgressStats.byBlock[group.blockCode].pct}%)
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -3492,7 +3892,7 @@ export default function App() {
                         return (
                           <div key={mod.moduleCode} className="border-l-[3px] border-l-[#4285F4] pl-4 sm:pl-5 space-y-3 relative">
                             {/* Module Label Sub-Header */}
-                            <div className="flex items-center justify-between gap-3 text-xs">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs w-full">
                               <div className="flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-[#4285F4]" />
                                 <h5 className="font-extrabold text-[#1a56bc] uppercase tracking-wider text-[11px] flex items-center gap-1.5">
@@ -3500,9 +3900,34 @@ export default function App() {
                                   <span className="text-[10px] font-mono text-slate-400 normal-case font-bold">({mod.moduleCode})</span>
                                 </h5>
                               </div>
-                              <span className="text-[10.5px] font-bold text-slate-400 bg-slate-100 px-2 rounded-lg border border-slate-150">
-                                {mod.fiches.length} {mod.fiches.length > 1 ? 'cours groupés' : 'cours unique'}
-                              </span>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {/* Module Seen documents progress bar */}
+                                {(() => {
+                                  const mStat = resourceProgressStats.byModule[mod.moduleCode];
+                                  if (mStat && mStat.total > 0) {
+                                    return (
+                                      <div className="flex items-center gap-2 w-44 sm:w-56 bg-white/90 border border-slate-200/55 p-1 px-2.5 rounded-full shadow-xs">
+                                        <span className="text-[8.5px] font-bold text-slate-500 font-mono whitespace-nowrap shrink-0">
+                                          Vu : {mStat.seen}/{mStat.total}
+                                        </span>
+                                        <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                          <div 
+                                            className="h-full bg-emerald-500 rounded-full transition-all duration-500" 
+                                            style={{ width: `${mStat.pct}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-[9px] font-black text-emerald-600 font-mono text-right shrink-0">
+                                          {mStat.pct}%
+                                        </span>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                                <span className="text-[10.5px] font-bold text-slate-400 bg-slate-100 px-2 rounded-lg border border-slate-150">
+                                  {mod.fiches.length} {mod.fiches.length > 1 ? 'cours groupés' : 'cours unique'}
+                                </span>
+                              </div>
                             </div>
 
                             {/* Fiches Cards Grid inside Module */}

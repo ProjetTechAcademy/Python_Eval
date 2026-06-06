@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, Headphones, FileText, Video, Image, Library, Volume2 } from 'lucide-react';
+import { ExternalLink, Headphones, FileText, Video, Image, Library, Check } from 'lucide-react';
 
 interface ResourcePlayerProps {
   ficheId: number;
@@ -8,7 +8,11 @@ interface ResourcePlayerProps {
   url?: string;
   type: 'audio' | 'slide' | 'video' | 'image' | 'nblm' | 'studi';
   zone: 'A' | 'B' | 'C' | 'common';
-  onPreviewInApp?: (resource: { title: string; resourceName: string; url: string; type: string; ficheId: number }) => void;
+  resourceKey?: string;
+  isSeen?: boolean;
+  seenAt?: string;
+  onToggleSeen?: (ficheId: number, resourceKey: string) => void;
+  onPreviewInApp?: (resource: { title: string; resourceName: string; url: string; type: string; ficheId: number; resourceKey?: string }) => void;
 }
 
 export default function ResourcePlayer({
@@ -18,12 +22,16 @@ export default function ResourcePlayer({
   url,
   type,
   zone,
+  resourceKey,
+  isSeen = false,
+  seenAt,
+  onToggleSeen,
   onPreviewInApp
 }: ResourcePlayerProps) {
 
   if (!url) {
     return (
-      <div className="flex items-center gap-1.5 p-1.5 px-2 bg-slate-50 border border-slate-100 rounded-lg text-slate-405 text-[10px] italic">
+      <div className="flex items-center gap-1.5 p-1.5 px-2 bg-slate-50 border border-slate-100 rounded-lg text-slate-400 text-[10px] italic">
         <span>Non disponible pour cette Zone 💤</span>
       </div>
     );
@@ -74,8 +82,27 @@ export default function ResourcePlayer({
   const borderStyleClasses = getTypeBorders();
 
   return (
-    <div className={`flex items-center justify-between gap-2.5 p-2 hover:shadow-md border rounded-xl transition-all duration-300 transform hover:-translate-y-[1px] ${borderStyleClasses}`}>
+    <div className={`flex items-center justify-between gap-2.5 p-2 hover:shadow-md border rounded-xl transition-all duration-300 transform hover:-translate-y-[1px] ${borderStyleClasses} ${isSeen ? 'bg-emerald-500/[0.04] border-emerald-200' : ''}`}>
       <div className="flex items-center gap-2 min-w-0 flex-1">
+        
+        {/* Toggle Seen Button */}
+        {onToggleSeen && resourceKey && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSeen(ficheId, resourceKey);
+            }}
+            className={`w-4.5 h-4.5 rounded-full border flex items-center justify-center shrink-0 cursor-pointer transition-all duration-300 ${
+              isSeen 
+                ? 'bg-[#34A853] border-[#34A853] text-white hover:bg-emerald-600 shadow-sm' 
+                : 'border-slate-300 hover:border-[#34A853] hover:bg-emerald-50 text-transparent'
+            }`}
+            title={isSeen ? `Pris connaissance le ${seenAt}. Cliquer pour marquer comme non lu.` : "Marquer ce document comme lu (pris connaissance)"}
+          >
+            <Check className="w-3 h-3 stroke-[3.5]" />
+          </button>
+        )}
+
         <div className="p-1 px-[5px] bg-white rounded-md border border-slate-200 shadow-sm shrink-0">
           {getTypeIcon()}
         </div>
@@ -86,8 +113,13 @@ export default function ResourcePlayer({
               {zoneBadge.text}
             </span>
           </div>
-          <h4 className="text-[11px] font-bold text-slate-800 flex items-center gap-1 leading-snug whitespace-normal break-words max-w-full" title={resourceName}>
-            {resourceName}
+          <h4 className="text-[11px] font-bold text-slate-800 flex flex-col gap-0.5 leading-snug whitespace-normal break-words max-w-full" title={resourceName}>
+            <span>{resourceName}</span>
+            {isSeen && seenAt && (
+              <span className="text-[8.5px] font-sans font-extrabold text-emerald-700 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/10 flex items-center gap-0.5 mt-0.5 w-fit select-none">
+                👁️ Vu le {seenAt}
+              </span>
+            )}
           </h4>
         </div>
       </div>
@@ -96,7 +128,7 @@ export default function ResourcePlayer({
       <div className="flex items-center gap-1 shrink-0">
         {onPreviewInApp && (
           <button
-            onClick={() => onPreviewInApp({ title: ficheTitle, resourceName, url, type, ficheId })}
+            onClick={() => onPreviewInApp({ title: ficheTitle, resourceName, url, type, ficheId, resourceKey })}
             className="py-1 px-2 pb-[5px] bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-[10px] flex items-center gap-1 font-extrabold cursor-pointer shadow-sm hover:scale-105 active:scale-95"
           >
             {type === 'audio' ? '🔊 Écouter' : '👁️ Lire'}
