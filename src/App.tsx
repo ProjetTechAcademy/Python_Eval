@@ -205,6 +205,41 @@ export default function App() {
     resourceKey?: string;
   } | null>(null);
 
+  const [activeUniverseTab, setActiveUniverseTab] = useState<'supports' | 'action' | 'validation' | 'synthese'>('supports');
+
+  // Auto-load first available resource when the immersive universe of a fiche is entered
+  useEffect(() => {
+    if (immersiveFiche) {
+      const resources = getFicheResources(immersiveFiche);
+      if (immersiveFiche.studi && immersiveFiche.studi.trim() !== '') {
+        const hasStudi = resources.some(r => r.key === 'studi');
+        if (!hasStudi) {
+          resources.push({
+            key: 'studi',
+            type: 'studi',
+            name: "Plateforme d'études Studi",
+            url: immersiveFiche.studi,
+            zone: 'C'
+          });
+        }
+      }
+      if (resources.length > 0) {
+        const isAlreadySelectedForThisFiche = selectedResourceForPreview && selectedResourceForPreview.ficheId === immersiveFiche.id;
+        if (!isAlreadySelectedForThisFiche) {
+          const first = resources[0];
+          setSelectedResourceForPreview({
+            title: immersiveFiche.title,
+            resourceName: first.name,
+            url: first.url,
+            type: first.type,
+            ficheId: immersiveFiche.id,
+            resourceKey: first.key
+          });
+        }
+      }
+    }
+  }, [immersiveFiche, selectedResourceForPreview]);
+
   interface ResourceInfo {
     key: string;
     type: string;
@@ -2822,12 +2857,15 @@ export default function App() {
 
           </div>
 
-          <div className="p-3.5 bg-slate-50 border-t border-slate-200 text-center shrink-0">
+          <div className="p-3.5 bg-slate-55 border-t border-slate-200 text-center shrink-0">
             <button
-              onClick={() => saveAndExport('ics')}
+              onClick={() => {
+                setFicheForReminderModal(null);
+                setCustomDateValue('');
+              }}
               className="w-full py-2.5 bg-slate-900 hover:bg-slate-850 text-white rounded-xl text-xs font-black uppercase tracking-widest cursor-pointer shadow-md"
             >
-              Enregistrer hors-ligne & Télécharger iCal (.ics) 💾
+              Fermer le planificateur ✕
             </button>
           </div>
 
@@ -2897,211 +2935,23 @@ export default function App() {
           </div>
         </header>
 
-        {/* Three-Column Workspace Layout */}
-        <main className="flex-1 p-4 lg:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch overflow-y-auto">
+        {/* Dynamic Workspace Layout with 80% grand viewer focus and 20% left tab menu */}
+        <main className="flex-1 p-4 lg:p-5 flex flex-col lg:flex-row gap-5 items-stretch overflow-hidden min-h-0 bg-slate-950">
           
-          {/* Left Column (Subject Metadata & Planning) - Spans 4 columns */}
-          <section className="xl:col-span-4 flex flex-col gap-6">
+          {/* LEFT COLUMN: Sidebar with Tabbed controls (Occupies ~24% list / content panel) */}
+          <section className="w-full lg:w-[24%] shrink-0 flex flex-col gap-4 bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-y-auto">
             
-            {/* Card A: Quick Info & Status Synchronizer */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
-              <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-                <span className="text-xl">📋</span>
-                <h3 className="font-extrabold text-sm uppercase tracking-wider text-slate-200">Statuts de validation</h3>
-              </div>
-
-              {/* Status Zone indicators for Space A, B, C */}
-              <div className="grid grid-cols-1 gap-3.5">
-                {/* Zone A */}
-                <div className="flex flex-col gap-1.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                  <span className="text-[10px] font-black tracking-wider text-[#4285F4] uppercase">Zone A — Auto-Évaluation</span>
-                  <div className="flex items-center gap-2 mt-1 justify-between">
-                    <select
-                      value={immersiveFiche.status1}
-                      onChange={(e) => {
-                        const val = e.target.value as FicheStatus;
-                        setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status1: val } : f));
-                      }}
-                      className={`text-xs font-bold rounded-lg p-1.5 px-3 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
-                        immersiveFiche.status1 === 'Fait' ? 'border-emerald-500 text-emerald-400' : immersiveFiche.status1 === 'En cours' ? 'border-yellow-500 text-yellow-400' : 'border-slate-700 text-slate-400'
-                      }`}
-                    >
-                      <option value="A faire">⭕ A faire</option>
-                      <option value="En cours">⏳ En cours</option>
-                      <option value="Fait">✔ Fait</option>
-                    </select>
-                    <span className="text-[10px] font-mono text-slate-400">{immersiveFiche.date1 || "Date non définie"}</span>
-                  </div>
-                </div>
-
-                {/* Zone B */}
-                <div className="flex flex-col gap-1.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                  <span className="text-[10px] font-black tracking-wider text-[#EA4335] uppercase">Zone B — Réponses Client & Jury</span>
-                  <div className="flex items-center gap-2 mt-1 justify-between">
-                    <select
-                      value={immersiveFiche.status2}
-                      onChange={(e) => {
-                        const val = e.target.value as FicheStatus;
-                        setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status2: val } : f));
-                      }}
-                      className={`text-xs font-bold rounded-lg p-1.5 px-3 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
-                        immersiveFiche.status2 === 'Fait' ? 'border-emerald-500 text-emerald-400' : immersiveFiche.status2 === 'En cours' ? 'border-yellow-500 text-yellow-400' : 'border-slate-700 text-slate-400'
-                      }`}
-                    >
-                      <option value="A faire">⭕ A faire</option>
-                      <option value="En cours">⏳ En cours</option>
-                      <option value="Fait">✔ Fait</option>
-                    </select>
-                    <span className="text-[10px] font-mono text-slate-400">{immersiveFiche.date2 || "Date non définie"}</span>
-                  </div>
-                </div>
-
-                {/* Zone C */}
-                <div className="flex flex-col gap-1.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                  <span className="text-[10px] font-black tracking-wider text-[#34A853] uppercase">Zone C — Compétences Communes</span>
-                  <div className="flex items-center gap-2 mt-1 justify-between">
-                    <select
-                      value={immersiveFiche.status3 || 'A faire'}
-                      onChange={(e) => {
-                        const val = e.target.value as FicheStatus;
-                        setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status3: val } : f));
-                      }}
-                      className={`text-xs font-bold rounded-lg p-1.5 px-3 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
-                        (immersiveFiche.status3 || 'A faire') === 'Fait' ? 'border-emerald-500 text-emerald-400' : (immersiveFiche.status3 || 'A faire') === 'En cours' ? 'border-yellow-500 text-yellow-400' : 'border-slate-700 text-slate-400'
-                      }`}
-                    >
-                      <option value="A faire">⭕ A faire</option>
-                      <option value="En cours">⏳ En cours</option>
-                      <option value="Fait">✔ Fait</option>
-                    </select>
-                    <span className="text-[10px] font-mono text-slate-400">{immersiveFiche.date3 || "Date non définie"}</span>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Card B: Action immédiate */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col gap-3 shadow-xl">
-              <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-                <span className="text-xl">⚡</span>
-                <h3 className="font-extrabold text-sm uppercase tracking-wider text-slate-200">Action immédiate</h3>
-              </div>
-              <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/40 border border-slate-850 p-3 rounded-xl font-medium">
-                {immersiveFiche.action}
-              </p>
-              {immersiveFiche.motorsLink && (
-                <a
-                  href={immersiveFiche.motorsLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-1 py-2.5 bg-gradient-to-r from-teal-500 to-[#34A853] hover:from-teal-600 hover:to-[#2d934b] text-white font-black text-xs text-center rounded-xl uppercase tracking-widest transition-transform hover:scale-101 shadow-sm shrink-0"
-                >
-                  🚀 Lancer l'Action M-Motors
-                </a>
-              )}
-            </div>
-
-            {/* Card C: Planificateur Spaced Repetitions (Specific to this card) */}
-            {(() => {
-              const ficheReminder = reminders.find(r => r.ficheId === immersiveFiche.id);
-              return (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col gap-3.5 shadow-xl">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-3 gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">📅</span>
-                      <h3 className="font-extrabold text-sm uppercase tracking-wider text-slate-200">Rappels de Révision</h3>
-                    </div>
-                    {!ficheReminder && (
-                      <button
-                        onClick={() => setFicheForReminderModal(immersiveFiche)}
-                        className="px-2 py-1 bg-blue-605 hover:bg-blue-700 text-white rounded-lg text-[9.5px] font-extrabold uppercase tracking-widest cursor-pointer shadow-md select-none shrink-0"
-                      >
-                        Programmer
-                      </button>
-                    )}
-                  </div>
-
-                  {ficheReminder ? (
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between gap-2 text-[10px] font-black text-slate-400 uppercase font-mono bg-slate-950/40 p-1.5 px-3 rounded-lg border border-slate-850">
-                        <span>Base: {ficheReminder.baseDate}</span>
-                        <button
-                          onClick={() => {
-                            setReminders(prev => prev.filter(r => r.id !== ficheReminder.id));
-                            triggerToast("Rappels supprimés pour cette fiche ♻️", "info");
-                          }}
-                          className="text-red-400 hover:text-red-500 text-[9px] uppercase cursor-pointer"
-                        >
-                          Supprimer
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 mt-1 border-0">
-                        {ficheReminder.scheduledDates.map((d, index) => (
-                          <button
-                            key={index}
-                            onClick={() => {
-                              setReminders(prev => prev.map(rem => {
-                                if (rem.id === ficheReminder.id) {
-                                  const updatedDates = [...rem.scheduledDates];
-                                  updatedDates[index] = { ...updatedDates[index], completed: !updatedDates[index].completed };
-                                  return { ...rem, scheduledDates: updatedDates };
-                                }
-                                return rem;
-                              }));
-                              triggerToast(d.completed ? "Rappel marqué non-vu" : "Point d'étape révisé ! 🎉");
-                            }}
-                            className={`p-2.5 rounded-xl border text-[10.5px] text-left transition-all relative flex flex-col gap-0.5 cursor-pointer leading-tight ${
-                              d.completed 
-                                ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300' 
-                                : 'bg-slate-950/30 border-slate-850 text-slate-400 hover:bg-slate-950/50 hover:border-slate-700'
-                            }`}
-                          >
-                            <span className="font-extrabold text-[9px] tracking-wider uppercase opacity-65">{d.label}</span>
-                            <span className="font-mono text-[10.5px]">{d.date}</span>
-                            <span className="absolute bottom-1.5 right-2 text-xs">{d.completed ? '🟢' : '⚪'}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center p-4 bg-slate-950/30 border border-dashed border-slate-800 rounded-xl text-xs text-slate-400 italic">
-                      Aucun rappel de révision programmé. Améliorez votre rétention grâce à l'algorithme des paliers de mémoire !
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-          </section>
-
-          {/* Middle Column (Interactive Resource Hub + Player) - Spans 5 columns */}
-          <section className="xl:col-span-5 flex flex-col gap-6">
-            
-            {/* Media Hub Player & Tab Controller */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col gap-4 shadow-xl flex-1">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3 gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">📦</span>
-                  <h3 className="font-extrabold text-sm uppercase tracking-wider text-slate-200">Ressources & Supports</h3>
-                </div>
-                {/* Dynamic Progress Badge */}
-                {(() => {
-                  const rList = getFicheResources(immersiveFiche);
-                  const totalR = rList.length;
-                  const rSeen = rList.filter(r => !!seenResources[immersiveFiche.id]?.[r.key]).length;
-                  const seenPct = totalR > 0 ? Math.round((rSeen / totalR) * 100) : 0;
-                  return (
-                    <span className="text-[10px] font-black tracking-wider text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-0.5 rounded-full uppercase font-mono">
-                      Supports vus: {rSeen}/{totalR} ({seenPct}%)
-                    </span>
-                  );
-                })()}
-              </div>
-
-              {/* List of active resource links */}
-              <div className="flex flex-col gap-2.5 max-h-[350px] overflow-y-auto pr-1">
-                {(() => {
+            {/* Tab selection grid */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 shrink-0">
+              <button
+                onClick={() => setActiveUniverseTab('supports')}
+                className={`py-2 text-[10.5px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                  activeUniverseTab === 'supports'
+                    ? 'bg-[#4285F4] text-white shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+              >
+                📚 Supports ({(() => {
                   const rList = getFicheResources(immersiveFiche);
                   if (immersiveFiche.studi && immersiveFiche.studi.trim() !== '') {
                     if (!rList.some(r => r.key === 'studi')) {
@@ -3114,271 +2964,494 @@ export default function App() {
                       });
                     }
                   }
-
-                  if (rList.length === 0) {
-                    return (
-                      <div className="text-center py-6 text-xs text-slate-400 italic bg-slate-950/30 rounded-xl border border-dashed border-slate-850">
-                        Aucun document ou fichier de support pour ce sujet.
-                      </div>
-                    );
-                  }
-
-                  return rList.map((r, rIdx) => {
-                    const isSeen = !!seenResources[immersiveFiche.id]?.[r.key];
-                    const seenAt = seenResources[immersiveFiche.id]?.[r.key];
-                    const isSelected = selectedResourceForPreview && selectedResourceForPreview.ficheId === immersiveFiche.id && selectedResourceForPreview.resourceKey === r.key;
-
-                    return (
-                      <div
-                        key={rIdx}
-                        className={`p-3 rounded-xl border transition-all flex flex-col gap-3 ${
-                          isSelected 
-                            ? 'bg-blue-950/30 border-blue-500/55' 
-                            : 'bg-slate-950/45 border-slate-850 hover:border-slate-700 hover:bg-slate-950/60'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <button
-                            onClick={() => {
-                              setSelectedResourceForPreview({
-                                title: immersiveFiche.title,
-                                resourceName: r.name,
-                                url: r.url,
-                                type: r.type,
-                                ficheId: immersiveFiche.id,
-                                resourceKey: r.key
-                              });
-                            }}
-                            className="flex-1 text-left flex items-start gap-2 cursor-pointer group select-none min-w-0"
-                          >
-                            <span className="text-sm pt-0.5">
-                              {r.type === 'audio' ? '🔊' : r.type === 'video' ? '📺' : r.type === 'slide' ? '📊' : r.type === 'image' ? '🖼️' : r.type === 'studi' ? '🎓' : r.type === 'nblm' ? '📓' : '📝'}
-                            </span>
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-xs font-bold text-slate-100 group-hover:text-blue-400 transition-colors truncate">
-                                {r.name}
-                              </span>
-                              <span className={`text-[8.5px] uppercase font-mono font-black mt-0.5 tracking-wider px-1.5 py-0.25 rounded border self-start ${
-                                r.zone === 'A' ? 'text-[#4285F4] bg-[#4285F4]/10 border-[#4285F4]/15' : r.zone === 'B' ? 'text-[#EA4335] bg-[#EA4335]/10 border-[#EA4335]/15' : 'text-[#34A853] bg-[#34A853]/10 border-[#34A853]/15'
-                              }`}>
-                                Zone {r.zone === 'common' ? 'Commune' : r.zone}
-                              </span>
-                            </div>
-                          </button>
-
-                          <button
-                            onClick={() => handleToggleResourceSeen(immersiveFiche.id, r.key)}
-                            className={`p-1.5 px-2 bg-slate-900 hover:bg-slate-800 text-[10px] font-extrabold uppercase tracking-wider rounded-lg border cursor-pointer select-none shrink-0 ${
-                              isSeen ? 'text-emerald-400 border-emerald-500/30' : 'text-slate-400 border-slate-800'
-                            }`}
-                            title={isSeen ? `Assimilé le ${seenAt}` : "Marquer comme vu"}
-                          >
-                            {isSeen ? '✔ VU' : '✓ Marquer vu'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-
-              {/* Player Frame Container */}
-              <div className="flex-1 mt-2.5 flex flex-col gap-2 min-h-[300px]">
-                {selectedResourceForPreview && selectedResourceForPreview.ficheId === immersiveFiche.id ? (
-                  <div className="flex-1 bg-slate-950 rounded-xl p-3 border border-slate-850 flex flex-col gap-2 relative">
-                    <div className="flex items-center justify-between border-b border-slate-850 pb-2 text-[10.5px] font-black text-slate-400 uppercase font-mono">
-                      <span className="truncate max-w-[250px]">{selectedResourceForPreview.resourceName}</span>
-                      <button
-                        onClick={() => setSelectedResourceForPreview(null)}
-                        className="text-red-400 hover:text-red-500 uppercase text-[9px] cursor-pointer font-extrabold"
-                      >
-                        ✕ Fermer
-                      </button>
-                    </div>
-
-                    {/* Display player content */}
-                    <div className="flex-1 w-full bg-black rounded-lg overflow-hidden relative flex flex-col items-center justify-center min-h-[220px]">
-                      {(() => {
-                        const url = selectedResourceForPreview.url;
-                        const ytEmbed = getYoutubeEmbedUrl(url);
-                        const isDirectVideo = isDirectVideoUrl(url) || selectedResourceForPreview.type === 'video';
-                        const driveEmbed = getDriveEmbedUrl(url);
-
-                        if (isDirectVideo) {
-                          return (
-                            <video 
-                              src={url} 
-                              className="w-full h-full max-h-[320px] bg-black object-contain" 
-                              controls 
-                              controlsList="nodownload"
-                              onContextMenu={(e) => e.preventDefault()}
-                              autoPlay 
-                              playsInline
-                            />
-                          );
-                        }
-
-                        if (ytEmbed) {
-                          return (
-                            <iframe 
-                              src={ytEmbed} 
-                              className="w-full h-full absolute top-0 left-0 border-0 bg-slate-900" 
-                              allow="autoplay; encrypted-media; picture-in-picture"
-                              allowFullScreen
-                              title="YouTube Live Player"
-                            />
-                          );
-                        }
-
-                        if (driveEmbed) {
-                          return (
-                            <iframe 
-                              src={driveEmbed} 
-                              className="w-full h-full absolute top-0 left-0 border-0 bg-slate-900" 
-                              allow="autoplay; encrypted-media"
-                              title="Drive Document Viewer"
-                            />
-                          );
-                        }
-
-                        if (selectedResourceForPreview.type === 'audio') {
-                          return (
-                            <div className="p-5 flex flex-col items-center justify-center gap-4 w-full h-full text-center">
-                              <span className="text-4xl animate-bounce">🎵</span>
-                              <h4 className="text-xs font-bold text-slate-100 uppercase tracking-widest">Écoute active du support</h4>
-                              <audio 
-                                src={url} 
-                                controls 
-                                className="w-full max-w-sm mt-1 focus:outline-none" 
-                                autoPlay
-                              />
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div className="p-6 text-center text-slate-400">
-                            <span className="text-3xl block mb-2">⚠️</span>
-                            <h5 className="font-bold text-xs text-slate-100 uppercase tracking-wider">Aperçu en iFrame non disponible</h5>
-                            <a 
-                              href={url} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-[10.5px] uppercase tracking-wider shadow"
-                            >
-                              Ouvrir le document externe ↗
-                            </a>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex-1 bg-slate-950/30 rounded-xl border border-dashed border-slate-850 flex flex-col items-center justify-center text-center p-6 text-slate-450">
-                    <span className="text-4xl mb-2">📁</span>
-                    <p className="text-xs max-w-sm font-medium">Sélectionnez un document, une vidéo, ou un fichier audio de support ci-dessus pour charger l'Aperçu Interactif.</p>
-                  </div>
-                )}
-              </div>
-
-            </div>
-            
-          </section>
-
-          {/* Right Column (Study Atmosphere & Audio TTS Reader) - Spans 3 columns */}
-          <section className="xl:col-span-3 flex flex-col gap-6">
-            
-            {/* Card D: Soundscapes Focus Atmosphere */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3 gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-indigo-400 text-lg">🔊</span>
-                  <h3 className="font-extrabold text-sm uppercase tracking-wider text-slate-200">Atmosphère d'Étude</h3>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-2.5">
-                {[
-                  { key: 'rain', name: 'Pluie relaxante 🌧️' },
-                  { key: 'waves', name: 'Brise marine 🌊' },
-                  { key: 'birds', name: 'Fascinants oiseaux 🕊️' },
-                  { key: 'fire', name: 'Feu crépitant 🔥' }
-                ].map(sound => {
-                  const state = ambientSounds[sound.key];
-                  return (
-                    <div key={sound.key} className="p-3 bg-slate-950/50 border border-slate-850 rounded-xl flex flex-col gap-2 hover:bg-slate-950 transition-all">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-extrabold text-slate-200 uppercase tracking-widest">{sound.name}</span>
-                        <button
-                          onClick={() => handleToggleAmbientSound(sound.key)}
-                          className={`p-1 px-2.5 rounded-lg text-[9.5px] font-black uppercase tracking-wider cursor-pointer ${
-                            state?.playing 
-                              ? 'bg-[#34A853]/20 border border-[#34A853]/30 text-emerald-400 ring-2 ring-emerald-500/20' 
-                              : 'bg-slate-850 hover:bg-slate-800 text-slate-400 border border-slate-750'
-                          }`}
-                        >
-                          {state?.playing ? 'ACTIF ON' : 'ACTIVER'}
-                        </button>
-                      </div>
-                      {state?.playing && (
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[9px] text-slate-400 uppercase font-mono">Vol</span>
-                          <input 
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            value={state.volume}
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value);
-                              setAmbientSounds(prev => {
-                                const nextState = {
-                                  ...prev,
-                                  [sound.key]: { ...prev[sound.key], volume: val }
-                                };
-                                if (audioRefs.current[sound.key]) {
-                                  audioRefs.current[sound.key]!.volume = val;
-                                }
-                                return nextState;
-                              });
-                            }}
-                            className="flex-1 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                          />
-                          <span className="text-[9px] font-mono text-slate-300 w-6 text-right">{Math.round(state.volume * 100)}%</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Card E: Synthesis Text-To-Speech Reader built directly inside column */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col gap-3 shadow-xl col-span-1">
-              <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-                <span className="text-xl">🗣️</span>
-                <h3 className="font-extrabold text-sm uppercase tracking-wider text-slate-200">Lecture Synthèse Vocale</h3>
-              </div>
+                  return rList.length;
+                })()})
+              </button>
               
-              <p className="text-[10.5px] text-slate-400 leading-normal italic">
-                Vous pouvez générer et écouter le cours synthétique M-Motors de cette fiche à voix haute grâce à notre assistant de lecture intégré. 
-              </p>
+              <button
+                onClick={() => setActiveUniverseTab('action')}
+                className={`py-2 text-[10.5px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                  activeUniverseTab === 'action'
+                    ? 'bg-[#EA4335] text-white shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+              >
+                🎯 Action
+              </button>
 
               <button
-                onClick={() => setSelectedSpeechFiche(immersiveFiche)}
-                className="mt-2 w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-705 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow cursor-pointer flex items-center justify-center gap-1.5 transition-transform hover:scale-101 shrink-0"
+                onClick={() => setActiveUniverseTab('validation')}
+                className={`py-2 text-[10.5px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                  activeUniverseTab === 'validation'
+                    ? 'bg-[#34A853] text-white shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
               >
-                <Volume2 className="w-4 h-4" /> Activer Synthesiser 🔊
+                📋 Suivi
               </button>
+
+              <button
+                onClick={() => setActiveUniverseTab('synthese')}
+                className={`py-2 text-[10.5px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                  activeUniverseTab === 'synthese'
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+              >
+                🗣️ Lecteur
+              </button>
+            </div>
+
+            {/* TAB CONTENT HOUSING */}
+            <div className="flex-1 flex flex-col gap-4 min-h-0">
+              
+              {/* TAB 1: Support assets */}
+              {activeUniverseTab === 'supports' && (
+                <div className="flex flex-col gap-3 flex-1 animate-fadeIn">
+                  <div className="flex items-center justify-between gap-1 border-b border-slate-800 pb-2">
+                    <span className="text-[11px] font-black text-slate-300 uppercase tracking-wider">📚 Supports d'étude</span>
+                    {(() => {
+                      const rList = getFicheResources(immersiveFiche);
+                      if (immersiveFiche.studi && immersiveFiche.studi.trim() !== '') {
+                        if (!rList.some(r => r.key === 'studi')) {
+                          rList.push({
+                            key: 'studi',
+                            type: 'studi',
+                            name: "Plateforme d'études Studi",
+                            url: immersiveFiche.studi,
+                            zone: 'C'
+                          });
+                        }
+                      }
+                      const totalR = rList.length;
+                      const rSeen = rList.filter(r => !!seenResources[immersiveFiche.id]?.[r.key]).length;
+                      return (
+                        <span className="text-[9px] font-mono font-black text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 rounded-full uppercase">
+                          {rSeen}/{totalR} vus
+                        </span>
+                      );
+                    })()}
+                  </div>
+
+                  <p className="text-[10px] text-slate-400 leading-normal italic">
+                    Sélectionnez un document, une vidéo, ou un message audio ci-dessous pour le charger instantanément à droite :
+                  </p>
+
+                  <div className="flex flex-col gap-2 overflow-y-auto max-h-[500px] pr-1">
+                    {(() => {
+                      const rList = getFicheResources(immersiveFiche);
+                      
+                      // Inject Studi link if defined
+                      if (immersiveFiche.studi && immersiveFiche.studi.trim() !== '') {
+                        if (!rList.some(r => r.key === 'studi')) {
+                          rList.push({
+                            key: 'studi',
+                            type: 'studi',
+                            name: "Plateforme d'études Studi",
+                            url: immersiveFiche.studi,
+                            zone: 'C'
+                          });
+                        }
+                      }
+
+                      if (rList.length === 0) {
+                        return (
+                          <div className="text-center py-6 text-xs text-slate-400 italic bg-slate-950/30 rounded-xl border border-dashed border-slate-850">
+                            Aucun document ou fichier de support pour ce sujet.
+                          </div>
+                        );
+                      }
+
+                      return rList.map((r, rIdx) => {
+                        const isSeen = !!seenResources[immersiveFiche.id]?.[r.key];
+                        const seenAt = seenResources[immersiveFiche.id]?.[r.key];
+                        const isSelected = selectedResourceForPreview && selectedResourceForPreview.ficheId === immersiveFiche.id && selectedResourceForPreview.resourceKey === r.key;
+
+                        return (
+                          <div
+                            key={rIdx}
+                            className={`p-2.5 rounded-xl border transition-all flex flex-col gap-2 bg-slate-950/60 leading-tight ${
+                              isSelected 
+                                ? 'border-blue-500 bg-blue-950/15 ring-1 ring-blue-500/30' 
+                                : 'border-slate-800 hover:border-slate-700 hover:bg-slate-950/90'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedResourceForPreview({
+                                    title: immersiveFiche.title,
+                                    resourceName: r.name,
+                                    url: r.url,
+                                    type: r.type,
+                                    ficheId: immersiveFiche.id,
+                                    resourceKey: r.key
+                                  });
+                                }}
+                                className="flex-1 text-left flex items-start gap-1.5 cursor-pointer group select-none min-w-0"
+                              >
+                                <span className="text-xs pt-0.5 shrink-0">
+                                  {r.type === 'audio' ? '🔊' : r.type === 'video' ? '📺' : r.type === 'slide' ? '📊' : r.type === 'image' ? '🖼️' : r.type === 'studi' ? '🎓' : r.type === 'nblm' ? '📓' : '📝'}
+                                </span>
+                                <div className="flex flex-col min-w-0">
+                                  <span className="text-[11px] font-bold text-slate-100 group-hover:text-blue-400 transition-colors break-words">
+                                    {r.name}
+                                  </span>
+                                  <span className={`text-[8px] uppercase font-mono font-black mt-1 tracking-wider px-1.5 py-0.25 rounded border self-start ${
+                                    r.zone === 'A' ? 'text-[#4285F4] bg-[#4285F4]/10 border-[#4285F4]/15' : r.zone === 'B' ? 'text-[#EA4335] bg-[#EA4335]/10 border-[#EA4335]/15' : 'text-[#34A853] bg-[#34A853]/10 border-[#34A853]/15'
+                                  }`}>
+                                    Zone {r.zone === 'common' ? 'Commune' : r.zone}
+                                  </span>
+                                </div>
+                              </button>
+
+                              <button
+                                onClick={() => handleToggleResourceSeen(immersiveFiche.id, r.key)}
+                                className={`p-1 px-1.5 bg-slate-900 hover:bg-slate-800 text-[8.5px] font-extrabold uppercase tracking-wider rounded-lg border cursor-pointer select-none shrink-0 transition-all ${
+                                  isSeen ? 'text-emerald-400 border-emerald-500/30' : 'text-slate-400 border-slate-805'
+                                }`}
+                                title={isSeen ? `Assimilé le ${seenAt}` : "Marquer comme vu"}
+                              >
+                                {isSeen ? '✔ VU' : '✓ Vu ?'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: Action Immédiate */}
+              {activeUniverseTab === 'action' && (
+                <div className="flex flex-col gap-3.5 flex-1 animate-fadeIn">
+                  <div className="flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                    <span className="text-lg">⚡</span>
+                    <span className="text-[11px] font-black text-slate-300 uppercase tracking-wider">Action immédiate</span>
+                  </div>
+
+                  <p className="text-[10px] text-slate-400 leading-normal italic">
+                    Consigne concrète de mise en œuvre de la formation :
+                  </p>
+
+                  <div className="bg-slate-950/60 border border-slate-850 p-3.5 rounded-xl text-xs font-semibold text-slate-205 leading-relaxed break-words">
+                    {immersiveFiche.action}
+                  </div>
+
+                  {immersiveFiche.motorsLink && (
+                    <a
+                      href={immersiveFiche.motorsLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2.5 bg-gradient-to-r from-teal-500 to-[#34A853] hover:from-teal-600 hover:to-[#2d934b] text-white font-black text-[10.5px] text-center rounded-xl uppercase tracking-widest transition-transform hover:scale-101 shadow-sm shrink-0 mt-2"
+                    >
+                      🚀 Lancer l'Action M-Motors
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: Statuts de Validation Zones A/B/C & Spaced Repetition */}
+              {activeUniverseTab === 'validation' && (
+                <div className="flex flex-col gap-4 flex-1 animate-fadeIn">
+                  {/* Status dropdowns */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                      <span className="text-sm">📋</span>
+                      <span className="text-[11px] font-black text-slate-300 uppercase tracking-wider">Avancement de la Fiche</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2.5 mt-1">
+                      {/* Zone A */}
+                      <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-950/40 border border-slate-855">
+                        <span className="text-[9px] font-black tracking-wider text-[#4285F4] uppercase">Zone A — Auto-Évaluation</span>
+                        <div className="flex items-center gap-2 mt-0.5 justify-between">
+                          <select
+                            value={immersiveFiche.status1}
+                            onChange={(e) => {
+                              const val = e.target.value as FicheStatus;
+                              setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status1: val } : f));
+                            }}
+                            className={`text-[10.5px] font-bold rounded-lg p-1 px-2 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
+                              immersiveFiche.status1 === 'Fait' ? 'border-emerald-500 text-emerald-400' : immersiveFiche.status1 === 'En cours' ? 'border-yellow-500 text-yellow-450' : 'border-slate-700 text-slate-400'
+                            }`}
+                          >
+                            <option value="A faire">⭕ A faire</option>
+                            <option value="En cours">⏳ En cours</option>
+                            <option value="Fait">✔ Fait</option>
+                          </select>
+                          <span className="text-[9px] font-mono text-slate-400">{immersiveFiche.date1 || "Date non définie"}</span>
+                        </div>
+                      </div>
+
+                      {/* Zone B */}
+                      <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-950/40 border border-slate-855">
+                        <span className="text-[9px] font-black tracking-wider text-[#EA4335] uppercase">Zone B — Jury & Validation</span>
+                        <div className="flex items-center gap-2 mt-0.5 justify-between">
+                          <select
+                            value={immersiveFiche.status2}
+                            onChange={(e) => {
+                              const val = e.target.value as FicheStatus;
+                              setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status2: val } : f));
+                            }}
+                            className={`text-[10.5px] font-bold rounded-lg p-1 px-2 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
+                              immersiveFiche.status2 === 'Fait' ? 'border-emerald-500 text-emerald-400' : immersiveFiche.status2 === 'En cours' ? 'border-yellow-500 text-yellow-450' : 'border-slate-700 text-slate-400'
+                            }`}
+                          >
+                            <option value="A faire">⭕ A faire</option>
+                            <option value="En cours">⏳ En cours</option>
+                            <option value="Fait">✔ Fait</option>
+                          </select>
+                          <span className="text-[9px] font-mono text-slate-400">{immersiveFiche.date2 || "Date non définie"}</span>
+                        </div>
+                      </div>
+
+                      {/* Zone C */}
+                      <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-950/40 border border-slate-855">
+                        <span className="text-[9px] font-black tracking-wider text-[#34A853] uppercase">Zone C — Tronc Commun</span>
+                        <div className="flex items-center gap-2 mt-0.5 justify-between">
+                          <select
+                            value={immersiveFiche.status3 || 'A faire'}
+                            onChange={(e) => {
+                              const val = e.target.value as FicheStatus;
+                              setFiches(prev => prev.map(f => f.id === immersiveFiche.id ? { ...f, status3: val } : f));
+                            }}
+                            className={`text-[10.5px] font-bold rounded-lg p-1 px-2 border outline-none bg-slate-900 text-slate-100 cursor-pointer ${
+                              (immersiveFiche.status3 || 'A faire') === 'Fait' ? 'border-emerald-500 text-emerald-400' : (immersiveFiche.status3 || 'A faire') === 'En cours' ? 'border-yellow-500 text-yellow-450' : 'border-slate-700 text-slate-400'
+                            }`}
+                          >
+                            <option value="A faire">⭕ A faire</option>
+                            <option value="En cours">⏳ En cours</option>
+                            <option value="Fait">✔ Fait</option>
+                          </select>
+                          <span className="text-[9px] font-mono text-slate-400">{immersiveFiche.date3 || "Date non définie"}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Memory Repetition Dates */}
+                  <div className="flex flex-col gap-2 mt-1">
+                    {(() => {
+                      const ficheReminder = reminders.find(r => r.ficheId === immersiveFiche.id);
+                      return (
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm">📅</span>
+                              <span className="text-[11px] font-black text-slate-300 uppercase tracking-wider">Rappels Mémoire</span>
+                            </div>
+                            {!ficheReminder && (
+                              <button
+                                onClick={() => setFicheForReminderModal(immersiveFiche)}
+                                className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[8.5px] font-bold uppercase tracking-wide cursor-pointer shadow"
+                              >
+                                Planifier
+                              </button>
+                            )}
+                          </div>
+
+                          {ficheReminder ? (
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center justify-between gap-2 text-[9px] font-bold text-slate-400 uppercase font-mono bg-slate-950/40 p-1 px-2 rounded border border-slate-850">
+                                <span>Base: {ficheReminder.baseDate}</span>
+                                <button
+                                  onClick={() => {
+                                    setReminders(prev => prev.filter(r => r.id !== ficheReminder.id));
+                                    triggerToast("Suivi de mémoire supprimé ♻️", "info");
+                                  }}
+                                  className="text-red-400 hover:text-red-500 text-[8px] cursor-pointer font-black"
+                                >
+                                  SUPPRIMER
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-2 gap-1.5">
+                                {ficheReminder.scheduledDates.map((d, index) => (
+                                  <button
+                                    key={index}
+                                    onClick={() => {
+                                      setReminders(prev => prev.map(rem => {
+                                        if (rem.id === ficheReminder.id) {
+                                          const updatedDates = [...rem.scheduledDates];
+                                          updatedDates[index] = { ...updatedDates[index], completed: !updatedDates[index].completed };
+                                          return { ...rem, scheduledDates: updatedDates };
+                                        }
+                                        return rem;
+                                      }));
+                                      triggerToast(d.completed ? "Étape désactivée ⏳" : "Étape validée ! 🎉");
+                                    }}
+                                    className={`p-1.5 rounded-lg border text-[8.5px] text-left transition-all relative flex flex-col cursor-pointer ${
+                                      d.completed 
+                                        ? 'bg-emerald-950/20 border-emerald-500/50 text-emerald-300' 
+                                        : 'bg-slate-950/30 border-slate-850 text-slate-400 hover:border-slate-700'
+                                    }`}
+                                  >
+                                    <span className="font-extrabold uppercase opacity-60 text-[7.5px] tracking-wide">{d.label}</span>
+                                    <span className="font-mono mt-0.5 text-[9px]">{d.date}</span>
+                                    <span className="absolute bottom-1 right-1.5 text-[8.5px]">{d.completed ? '🟢' : '⚪'}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-slate-400 leading-normal italic text-center p-3 bg-slate-950/20 border border-dashed border-slate-850 rounded-xl">
+                              Aucun rappel de révision programmé.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: Text-To-Speech Course Reader */}
+              {activeUniverseTab === 'synthese' && (
+                <div className="flex flex-col gap-3.5 flex-1 animate-fadeIn">
+                  <div className="flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                    <span className="text-lg">🗣️</span>
+                    <span className="text-[11px] font-black text-slate-300 uppercase tracking-wider font-sans">Lecteur Audio du Cours</span>
+                  </div>
+
+                  <p className="text-[10px] text-slate-400 leading-normal italic">
+                    Pour réviser les mains libres, lancez notre assistant de synthèse vocale intégré pour écouter le cours synthétique.
+                  </p>
+
+                  <div className="p-3.5 bg-slate-950/60 border border-slate-850 rounded-xl text-center flex flex-col gap-3">
+                    <span className="text-2xl animate-bounce">🎙️</span>
+                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest font-black">Lecteur de synthèse</span>
+                    <button
+                      onClick={() => setSelectedSpeechFiche(immersiveFiche)}
+                      className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow cursor-pointer flex items-center justify-center gap-1.5 transition-transform hover:scale-101"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" /> Activer le Lecteur 🔊
+                    </button>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </section>
+
+          {/* RIGHT COLUMN: REVOLUTIONARY GRAND VISUALISEUR PRINCIPALE (Occupies 76% width, always visible) */}
+          <section className="flex-1 flex flex-col bg-slate-900 border border-slate-800 rounded-2xl p-4 min-h-0 relative">
+            
+            {/* Visualizer header bar */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3 gap-4 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-sm">👁️</span>
+                <span className="text-[10px] uppercase font-mono font-black text-slate-400 tracking-wider shrink-0">SUPPORT ACTIF :</span>
+                <h2 className="text-xs font-extrabold text-white truncate max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl" title={selectedResourceForPreview ? selectedResourceForPreview.resourceName : "Aucun"}>
+                  {selectedResourceForPreview ? selectedResourceForPreview.resourceName : "Cliquez sur un document ou support pour le charger"}
+                </h2>
+              </div>
+
+              {selectedResourceForPreview && (
+                <button
+                  onClick={() => setIsFullscreenPreview(true)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all hover:scale-101 cursor-pointer shrink-0"
+                  title="Agrandir en Plein Écran pour concentration absolue"
+                >
+                  🖥️ Plein Écran
+                </button>
+              )}
+            </div>
+
+            {/* Embed container - Styled premium */}
+            <div className="flex-1 w-full bg-slate-950 rounded-xl overflow-hidden relative flex flex-col min-h-[400px]">
+              {selectedResourceForPreview ? (
+                <div className="absolute inset-0 w-full h-full flex flex-col">
+                  {(() => {
+                    const url = selectedResourceForPreview.url;
+                    const ytEmbed = getYoutubeEmbedUrl(url);
+                    const isDirectVideo = isDirectVideoUrl(url) || selectedResourceForPreview.type === 'video';
+                    const driveEmbed = getDriveEmbedUrl(url);
+
+                    if (isDirectVideo) {
+                      return (
+                        <video 
+                          src={url} 
+                          className="w-full h-full bg-black object-contain" 
+                          controls 
+                          controlsList="nodownload"
+                          onContextMenu={(e) => e.preventDefault()}
+                          autoPlay 
+                          playsInline
+                        />
+                      );
+                    }
+
+                    if (ytEmbed) {
+                      return (
+                        <iframe 
+                          src={ytEmbed} 
+                          className="w-full h-full border-0 bg-slate-900" 
+                          allow="autoplay; encrypted-media; picture-in-picture"
+                          allowFullScreen
+                          title="YouTube Live Player"
+                        />
+                      );
+                    }
+
+                    if (driveEmbed) {
+                      return (
+                        <iframe 
+                          src={driveEmbed} 
+                          className="w-full h-full border-0 bg-slate-900" 
+                          allow="autoplay; encrypted-media"
+                          title="Drive Document Viewer"
+                        />
+                      );
+                    }
+
+                    if (selectedResourceForPreview.type === 'audio') {
+                      return (
+                        <div className="p-8 flex flex-col items-center justify-center gap-5 w-full h-full text-center bg-slate-950">
+                          <span className="text-5xl animate-bounce">🎵</span>
+                          <h4 className="text-xs font-bold text-slate-150 uppercase tracking-widest">Écoute active du support</h4>
+                          <audio 
+                            src={url} 
+                            controls 
+                            className="w-full max-w-md mt-2 focus:outline-none" 
+                            autoPlay
+                          />
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="p-8 text-center text-slate-400 flex flex-col items-center justify-center w-full h-full bg-slate-950">
+                        <span className="text-4xl block mb-2">⚠️</span>
+                        <h5 className="font-bold text-xs text-slate-100 uppercase tracking-wider">Aperçu en iFrame non disponible</h5>
+                        <p className="text-[11px] text-slate-400 mt-1 max-w-sm">Le navigateur requiert une ouverture externe sécurisée pour accéder à ce support.</p>
+                        <a 
+                          href={url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-[10px] uppercase tracking-wider shadow"
+                        >
+                          Ouvrir le document externe ↗
+                        </a>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
+                  <span className="text-5xl mb-3">📁</span>
+                  <p className="text-xs max-w-sm font-medium">Sélectionnez un document, une vidéo, ou un fichier audio de support dans l'onglet de gauche pour charger l'Aperçu.</p>
+                </div>
+              )}
             </div>
 
           </section>
           
         </main>
-        
+
         {/* Footer of Immersive Space */}
-        <footer className="p-3.5 bg-slate-950 border-t border-slate-850 text-center text-[10px] text-slate-500 font-mono tracking-wide mt-auto shrink-0">
-          © 2026 M-Motors Study Space • Tous vos progrès sont synchronisés en temps réel dans votre navigateur.
+        <footer className="p-3 bg-slate-950 border-t border-slate-850 text-center text-[10px] text-slate-500 font-mono tracking-wide mt-auto shrink-0">
+          © 2026 M-Motors Study Space • Tous vos progrès sont synchronisés en temps réel.
         </footer>
       </div>
     );
