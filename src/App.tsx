@@ -4975,74 +4975,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 1. OVERALL STATS BENTO BOARD : UNIQUE ET ISOLÉ (LA ZONE ACTIVE SEULEMENT) */}
-        <div className="mb-8">
-          <ThreeDBox
-            themeColor={activeInfo.color as any}
-            className="flex flex-col justify-between max-w-4xl mx-auto shadow-2xl ring-4 ring-slate-900/5"
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <span
-                  className={`text-xs uppercase tracking-wider font-bold ${activeInfo.themeText} font-mono`}
-                >
-                  {activeInfo.title1}
-                </span>
-                <h4 className="text-2xl font-black text-slate-900 mt-1">
-                  {activeInfo.title2}
-                </h4>
-              </div>
-              {activeInfo.icon}
-            </div>
-
-            <div className="my-6">
-              <div className="flex items-baseline gap-2">
-                <span className="text-5xl font-black text-slate-950">
-                  {activeInfo.stats.pct}%
-                </span>
-                <span className="text-sm text-slate-500 font-bold">
-                  de fiches validées dans cette zone
-                </span>
-              </div>
-              <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden mt-4 border border-slate-200">
-                <div
-                  className={`${activeInfo.bg} h-full rounded-full transition-all duration-500 shadow-inner`}
-                  style={{ width: `${activeInfo.stats.pct}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-200 text-sm">
-              <div>
-                <p className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  Terminées ✔
-                </p>
-                <p className="text-xl font-extrabold text-[#34A853]">
-                  {activeInfo.stats.fait} fiches
-                </p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  Travail ⏳
-                </p>
-                <p className="text-xl font-extrabold text-[#FBBC05]">
-                  {activeInfo.stats.cours} fiches
-                </p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  Reste 💤
-                </p>
-                <p className="text-xl font-extrabold text-[#EA4335]">
-                  {activeInfo.stats.faire} fiches
-                </p>
-              </div>
-            </div>
-          </ThreeDBox>
-        </div>
-
-
-
         {/* 3. SWITCH HUB ZONE: ACTIVATE USER INTERFACES */}
         <div className="w-full flex justify-center mb-8 px-4">
           <div
@@ -5135,6 +5067,75 @@ export default function App() {
               Zone E: Digital CDO & SD
             </button>
           </div>
+        </div>
+
+
+
+
+        {/* 1. OVERALL STATS BENTO BOARD : UNIQUE ET ISOLÉ (LA ZONE ACTIVE SEULEMENT) */}
+        <div className="mb-8">
+          <ThreeDBox
+            themeColor={activeInfo.color as any}
+            className="flex flex-col justify-between max-w-4xl mx-auto shadow-2xl ring-4 ring-slate-900/5"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <span
+                  className={`text-xs uppercase tracking-wider font-bold ${activeInfo.themeText} font-mono`}
+                >
+                  {activeInfo.title1}
+                </span>
+                <h4 className="text-2xl font-black text-slate-900 mt-1">
+                  {activeInfo.title2}
+                </h4>
+              </div>
+              {activeInfo.icon}
+            </div>
+
+            <div className="my-6">
+              <div className="flex items-baseline gap-2">
+                <span className="text-5xl font-black text-slate-950">
+                  {activeInfo.stats.pct}%
+                </span>
+                <span className="text-sm text-slate-500 font-bold">
+                  de fiches validées dans cette zone
+                </span>
+              </div>
+              <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden mt-4 border border-slate-200">
+                <div
+                  className={`${activeInfo.bg} h-full rounded-full transition-all duration-500 shadow-inner`}
+                  style={{ width: `${activeInfo.stats.pct}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-200 text-sm">
+              <div>
+                <p className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                  Terminées ✔
+                </p>
+                <p className="text-xl font-extrabold text-[#34A853]">
+                  {activeInfo.stats.fait} fiches
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                  Travail ⏳
+                </p>
+                <p className="text-xl font-extrabold text-[#FBBC05]">
+                  {activeInfo.stats.cours} fiches
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                  Reste 💤
+                </p>
+                <p className="text-xl font-extrabold text-[#EA4335]">
+                  {activeInfo.stats.faire} fiches
+                </p>
+              </div>
+            </div>
+          </ThreeDBox>
         </div>
 
         {/* CLUB ÉLITE & DIVERTISSEMENT - MATHILDE'S PEPS GRADIENTS */}
