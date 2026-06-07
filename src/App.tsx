@@ -13,18 +13,6 @@ import CsvLoader, {
 } from "./components/CsvLoader";
 import SpeechReaderModal from "./components/SpeechReaderModal";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-} from "recharts";
-import {
   Search,
   BookOpen,
   GraduationCap,
@@ -1281,75 +1269,6 @@ export default function App() {
     "Digital CDO & SD",
   ];
 
-  const resourceProgressStats = useMemo(() => {
-    const stats = {
-      byTopic: {} as Record<
-        string,
-        { total: number; seen: number; pct: number }
-      >,
-      byBlock: {} as Record<
-        string,
-        { total: number; seen: number; pct: number }
-      >,
-      byModule: {} as Record<
-        string,
-        { total: number; seen: number; pct: number }
-      >,
-      global: { total: 0, seen: 0, pct: 0 },
-    };
-
-    topics.forEach((t) => {
-      if (t !== "All") {
-        stats.byTopic[t] = { total: 0, seen: 0, pct: 0 };
-      }
-    });
-
-    fiches.forEach((f) => {
-      const title = f.title || "";
-      const { bCode: blockCode, mCode: moduleCode } =
-        parseBlockAndModule(title);
-
-      if (!stats.byBlock[blockCode]) {
-        stats.byBlock[blockCode] = { total: 0, seen: 0, pct: 0 };
-      }
-      if (!stats.byModule[moduleCode]) {
-        stats.byModule[moduleCode] = { total: 0, seen: 0, pct: 0 };
-      }
-
-      const resources = getFicheResources(f);
-      const seenMap = seenResources[f.id] || {};
-
-      resources.forEach((r) => {
-        const isSeen = !!seenMap[r.key];
-
-        if (stats.byTopic[f.topic]) {
-          stats.byTopic[f.topic].total++;
-          if (isSeen) stats.byTopic[f.topic].seen++;
-        }
-
-        stats.byBlock[blockCode].total++;
-        if (isSeen) stats.byBlock[blockCode].seen++;
-
-        stats.byModule[moduleCode].total++;
-        if (isSeen) stats.byModule[moduleCode].seen++;
-
-        stats.global.total++;
-        if (isSeen) stats.global.seen++;
-      });
-    });
-
-    const calcPct = (item: { total: number; seen: number; pct: number }) => {
-      item.pct =
-        item.total > 0 ? Math.round((item.seen / item.total) * 100) : 0;
-    };
-
-    Object.values(stats.byTopic).forEach(calcPct);
-    Object.values(stats.byBlock).forEach(calcPct);
-    Object.values(stats.byModule).forEach(calcPct);
-    calcPct(stats.global);
-
-    return stats;
-  }, [fiches, seenResources]);
 
   const fichesFilteredOnlyByBlockAndModule = useMemo(() => {
     return fichesFilteredByZone.filter((f) => {
@@ -1512,80 +1431,7 @@ export default function App() {
       });
   }, [filteredFiches]);
 
-  const comparisonChartData = useMemo(() => {
-    return topics
-      .filter((t) => t !== "All")
-      .map((topic) => {
-        const subset1 = fiches.filter(
-          (f) => f.topic === topic && f.status1 === "Fait",
-        ).length;
-        const subset2 = fiches.filter(
-          (f) => f.topic === topic && f.status2 === "Fait",
-        ).length;
-        const subset3 = fiches.filter(
-          (f) => f.topic === topic && (f.status3 || "A faire") === "Fait",
-        ).length;
-        const subset4 = fiches.filter(
-          (f) => f.topic === topic && (f.status4 || "A faire") === "Fait",
-        ).length;
-        const subset5 = fiches.filter(
-          (f) => f.topic === topic && (f.status5 || "A faire") === "Fait",
-        ).length;
-        const total = fiches.filter((f) => f.topic === topic).length;
-        return {
-          name: topic,
-          "Zone A - Ma Progression (%)":
-            total > 0 ? Math.round((subset1 / total) * 100) : 0,
-          "Zone B - Réponses Jury (%)":
-            total > 0 ? Math.round((subset2 / total) * 100) : 0,
-          "Zone C - Commun (%)":
-            total > 0 ? Math.round((subset3 / total) * 100) : 0,
-          "Zone D - DWWM (%)":
-            total > 0 ? Math.round((subset4 / total) * 100) : 0,
-          "Zone E - Digital (%)":
-            total > 0 ? Math.round((subset5 / total) * 100) : 0,
-        };
-      });
-  }, [fiches]);
 
-  const progressTimelineData = [
-    {
-      name: "Étape 1: Bases",
-      "Ma Réponse": 15,
-      "Retour Jury": 5,
-      "Zone C": 10,
-    },
-    {
-      name: "Étape 2: Bootstrap",
-      "Ma Réponse": 35,
-      "Retour Jury": 15,
-      "Zone C": 25,
-    },
-    {
-      name: "Étape 3: Bases de Données",
-      "Ma Réponse": 55,
-      "Retour Jury": 28,
-      "Zone C": 42,
-    },
-    {
-      name: "Étape 4: Python Backend",
-      "Ma Réponse": 72,
-      "Retour Jury": 40,
-      "Zone C": 58,
-    },
-    {
-      name: "Étape 5: Flask & Dev",
-      "Ma Réponse": 88,
-      "Retour Jury": 65,
-      "Zone C": 75,
-    },
-    {
-      name: "Étape 6: Projet Final",
-      "Ma Réponse": stats1.pct,
-      "Retour Jury": stats2.pct,
-      "Zone C (Commun)": stats3.pct,
-    },
-  ];
 
   const renderFicheCard = (fiche: Fiche) => {
     const currentStatus =
@@ -1626,13 +1472,19 @@ export default function App() {
         });
       }
     }
-    const totalResources = ficheResources.length;
-    const seenResourcesForFiche = seenResources[fiche.id] || {};
-    const seenCount = ficheResources.filter(
-      (r) => !!seenResourcesForFiche[r.key],
-    ).length;
-    const progressPct =
-      totalResources > 0 ? Math.round((seenCount / totalResources) * 100) : 0;
+    // Tri des ressources : vidéo en premier
+    const priority: Record<string, number> = {
+      video: 1,
+      audio: 2,
+      slide: 3,
+      pdf: 4,
+      image: 5,
+      nblm: 6,
+      studi: 7,
+    };
+    ficheResources.sort(
+      (a, b) => (priority[a.type] ?? 99) - (priority[b.type] ?? 99)
+    );
 
     return (
       <div
@@ -1729,52 +1581,6 @@ export default function App() {
                 {fiche.title}
               </h3>
 
-              {totalResources > 0 ? (
-                <div
-                  id={`fiche-progress-container-${fiche.id}`}
-                  className="mt-3.5 flex items-center justify-between gap-3 bg-slate-50 border border-slate-200/60 p-2 px-3.5 rounded-xl shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]"
-                >
-                  <div className="flex items-center gap-1.1 text-[10.5px] font-extrabold text-slate-500 shrink-0 uppercase tracking-widest">
-                    <span className="text-[11px] mr-1">📊</span>Supports vus (
-                    {activeZone}) :
-                  </div>
-                  <div
-                    id={`fiche-progress-track-${fiche.id}`}
-                    className="flex-1 h-2 bg-slate-200/80 rounded-full overflow-hidden shadow-inner relative"
-                  >
-                    <div
-                      id={`fiche-progress-bar-${fiche.id}`}
-                      className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r ${
-                        progressPct === 100
-                          ? "from-emerald-500 to-teal-500 shadow-[0_0_8px_rgba(16,185,129,0.2)]"
-                          : progressPct >= 50
-                            ? "from-indigo-500 to-blue-600"
-                            : "from-blue-500 to-cyan-500"
-                      }`}
-                      style={{ width: `${progressPct}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      id={`fiche-progress-badge-${fiche.id}`}
-                      className={`text-[10px] font-black px-2 py-0.5 rounded-md font-mono shrink-0 whitespace-nowrap transition-colors duration-300 ${
-                        progressPct === 100
-                          ? "text-emerald-700 bg-emerald-50 border border-emerald-200"
-                          : "text-indigo-750 bg-indigo-50 border border-indigo-150"
-                      }`}
-                    >
-                      👁️ {seenCount}/{totalResources} ({progressPct}%)
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  id={`fiche-progress-empty-${fiche.id}`}
-                  className="mt-3.5 text-[10px] text-slate-400 font-extrabold italic bg-slate-50/50 p-2 px-3 rounded-xl border border-dashed border-slate-200/55 flex items-center gap-1.5"
-                >
-                  📁 Aucun support requis de validation pour cette zone
-                </div>
-              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -5235,300 +5041,7 @@ export default function App() {
           </ThreeDBox>
         </div>
 
-        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-5 rounded-3xl border border-slate-800 shadow-xl mb-8 flex flex-col gap-5 text-white font-sans animate-fadeIn">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.08] pb-4">
-            <div>
-              <span className="text-[10px] uppercase font-mono tracking-widest text-[#4285F4] font-bold block">
-                🎯 SUIVI DE PRISE DE CONNAISSANCE DE MATHILDE (VU/LU)
-              </span>
-              <h3 className="text-lg md:text-xl font-black text-slate-100 mt-1 flex items-center gap-2">
-                📂 Progression globale des Supports
-              </h3>
-            </div>
-            <div className="bg-emerald-500/10 px-4 py-1.5 rounded-2xl border border-emerald-500/20 text-right shrink-0">
-              <span className="text-xs text-slate-400 block font-bold">
-                Total Assimilé 👁️
-              </span>
-              <span className="text-xl font-black text-[#5fc480]">
-                {resourceProgressStats.global.pct}%
-              </span>
-              <span className="text-[10px] text-slate-300 block font-mono">
-                ({resourceProgressStats.global.seen} /{" "}
-                {resourceProgressStats.global.total} docs)
-              </span>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white/[0.02] p-4 rounded-2xl border border-white/[0.05] hover:border-white/[0.1] transition-all flex flex-col gap-4">
-              <h4 className="font-extrabold text-xs tracking-wider uppercase text-slate-300 flex items-center gap-1.5 border-b border-white/[0.05] pb-2">
-                📚 PAR MATIÈRE
-              </h4>
-              <div className="flex flex-col gap-3.5 flex-1 overflow-y-auto max-h-[300px] pr-1 scrollbar-thin">
-                {(
-                  Object.entries(resourceProgressStats.byTopic) as [
-                    string,
-                    { total: number; seen: number; pct: number },
-                  ][]
-                ).map(([topic, stat]) => (
-                  <div key={topic} className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between text-xs font-bold text-slate-200">
-                      <span
-                        className="truncate max-w-[150px] sm:max-w-[180px] lg:max-w-[200px]"
-                        title={topic}
-                      >
-                        {topic}
-                      </span>
-                      <span className="font-mono text-[#4285F4]">
-                        {stat.pct}%{" "}
-                        <span className="text-[10px] text-slate-450 font-normal">
-                          ({stat.seen}/{stat.total})
-                        </span>
-                      </span>
-                    </div>
-                    <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden border border-white/[0.05]">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          stat.pct === 100
-                            ? "bg-[#34A853]"
-                            : stat.pct >= 50
-                              ? "bg-[#FBBC05]"
-                              : "bg-[#4285F4]"
-                        }`}
-                        style={{ width: `${stat.pct}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white/[0.02] p-4 rounded-2xl border border-white/[0.05] hover:border-white/[0.1] transition-all flex flex-col gap-4">
-              <h4 className="font-extrabold text-xs tracking-wider uppercase text-slate-300 flex items-center gap-1.5 border-b border-white/[0.05] pb-2">
-                🧱 PAR BLOC D'ÉTUDE
-              </h4>
-              <div className="flex flex-col gap-3.5 flex-1 overflow-y-auto max-h-[300px] pr-1 scrollbar-thin">
-                {(
-                  Object.entries(resourceProgressStats.byBlock) as [
-                    string,
-                    { total: number; seen: number; pct: number },
-                  ][]
-                )
-                  .sort((a, b) => {
-                    if (a[0] === "Autre") return 1;
-                    if (b[0] === "Autre") return -1;
-                    return a[0].localeCompare(b[0], undefined, {
-                      numeric: true,
-                      sensitivity: "base",
-                    });
-                  })
-                  .map(([block, stat]) => (
-                    <div key={block} className="flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between text-xs font-bold text-slate-200">
-                        <span>
-                          {block === "Autre"
-                            ? "Hors Blocs"
-                            : `Bloc ${block.replace("B", "")}`}
-                        </span>
-                        <span className="font-mono text-[#4285F4]">
-                          {stat.pct}%{" "}
-                          <span className="text-[10px] text-slate-450 font-normal">
-                            ({stat.seen}/{stat.total})
-                          </span>
-                        </span>
-                      </div>
-                      <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden border border-white/[0.05]">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            stat.pct === 100
-                              ? "bg-[#34A853]"
-                              : stat.pct >= 50
-                                ? "bg-[#FBBC05]"
-                                : "bg-[#4285F4]"
-                          }`}
-                          style={{ width: `${stat.pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            <div className="bg-white/[0.02] p-4 rounded-2xl border border-white/[0.05] hover:border-white/[0.1] transition-all flex flex-col gap-4">
-              <h4 className="font-extrabold text-xs tracking-wider uppercase text-slate-300 flex items-center gap-1.5 border-b border-white/[0.05] pb-2">
-                📦 PAR MODULE
-              </h4>
-              <div className="flex flex-col gap-3.5 flex-1 overflow-y-auto max-h-[300px] pr-1 scrollbar-thin">
-                {(
-                  Object.entries(resourceProgressStats.byModule) as [
-                    string,
-                    { total: number; seen: number; pct: number },
-                  ][]
-                )
-                  .sort((a, b) => {
-                    if (a[0] === "Autre") return 1;
-                    if (b[0] === "Autre") return -1;
-                    return a[0].localeCompare(b[0], undefined, {
-                      numeric: true,
-                      sensitivity: "base",
-                    });
-                  })
-                  .map(([mod, stat]) => (
-                    <div key={mod} className="flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between text-xs font-bold text-slate-200">
-                        <span>
-                          {mod === "Autre"
-                            ? "Autre"
-                            : `Module ${mod.replace("M", "")}`}
-                        </span>
-                        <span className="font-mono text-[#4285F4]">
-                          {stat.pct}%{" "}
-                          <span className="text-[10px] text-slate-450 font-normal">
-                            ({stat.seen}/{stat.total})
-                          </span>
-                        </span>
-                      </div>
-                      <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden border border-white/[0.05]">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            stat.pct === 105 || stat.pct === 100
-                              ? "bg-[#34A853]"
-                              : stat.pct >= 50
-                                ? "bg-[#FBBC05]"
-                                : "bg-[#4285F4]"
-                          }`}
-                          style={{ width: `${stat.pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-          <div className="lg:col-span-8 bg-white p-6 rounded-3xl shadow-md border-b-4 border-[#4285F4] relative overflow-hidden ring-4 ring-[#4285F4]/5 animate-fadeIn">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-150 mb-4">
-              <h3 className="font-extrabold text-base flex items-center gap-2 text-slate-800">
-                <TrendingUp className="w-5 h-5 text-indigo-500" /> Taux de
-                validation par matières (%)
-              </h3>
-              <span className="text-xs text-slate-400 font-mono">
-                Vue Globale Inter-Zones
-              </span>
-            </div>
-
-            <div className="h-64 sm:h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={comparisonChartData}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    vertical={false}
-                    stroke="#E2E8F0"
-                  />
-                  <XAxis
-                    dataKey="name"
-                    stroke="#64748B"
-                    fontSize={11}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    stroke="#64748B"
-                    fontSize={11}
-                    tickFormatter={(v) => `${v}%`}
-                    tickLine={false}
-                  />
-                  <Tooltip formatter={(value) => [`${value}%`]} />
-                  <Legend
-                    wrapperStyle={{ fontSize: "11px", paddingTop: "10px" }}
-                  />
-                  <Bar
-                    dataKey="Zone A - Ma Progression (%)"
-                    fill="#4285F4"
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Bar
-                    dataKey="Zone B - Réponses Jury (%)"
-                    fill="#EA4335"
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Bar
-                    dataKey="Zone C - Commun (%)"
-                    fill="#10B981"
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Bar
-                    dataKey="Zone D - DWWM (%)"
-                    fill="#8B5CF6"
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Bar
-                    dataKey="Zone E - Digital (%)"
-                    fill="#EC4899"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="lg:col-span-4 bg-white p-6 rounded-3xl shadow-md border-b-4 border-[#EA4335] relative overflow-hidden ring-4 ring-[#EA4335]/5 flex flex-col justify-between animate-fadeIn">
-            <div className="pb-4 border-b border-slate-150">
-              <h3 className="font-extrabold text-base flex items-center gap-2 text-slate-800">
-                🚀 Simulation de Soutenance
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Évolution temporelle estimée jusqu'à l'examen
-              </p>
-            </div>
-
-            <div className="h-44 sm:h-48 my-3 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={progressTimelineData}>
-                  <XAxis dataKey="name" fontSize={9} stroke="#94A3B8" />
-                  <Tooltip formatter={(v) => [`${v}%`]} />
-                  <Line
-                    type="monotone"
-                    dataKey="Ma Réponse"
-                    name="Vos Progrès"
-                    stroke="#4285F4"
-                    strokeWidth={3}
-                    activeDot={{ r: 8 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="Retour Jury"
-                    name="Conformité Jury"
-                    stroke="#EA4335"
-                    strokeWidth={2.5}
-                    strokeDasharray="4 4"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="Zone C (Commun)"
-                    name="Tracés Communs"
-                    stroke="#10B981"
-                    strokeWidth={2.5}
-                    strokeDasharray="2 2"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="bg-[#F0F2F5] rounded-2xl p-3.5 text-xs text-slate-600 border border-slate-200">
-              <p className="font-semibold text-slate-800 flex items-center gap-1">
-                📌 Astuce d'Isolation :
-              </p>
-              <p className="mt-1 text-[11px] leading-relaxed">
-                Les espaces (DWWM, Digital, etc.) sont 100% isolés les uns des
-                autres pour éviter tout "cafouillage". Cliquez sur une Zone
-                ci-dessous pour ne voir QUE les données de cette zone !
-              </p>
-            </div>
-          </div>
-        </div>
 
         {/* 3. SWITCH HUB ZONE: ACTIVATE USER INTERFACES */}
         <div className="w-full flex justify-center mb-8 px-4">
@@ -5936,34 +5449,6 @@ export default function App() {
                       className={`p-1.5 px-3 rounded-xl text-[11px] font-extrabold cursor-pointer transition-all duration-300 flex items-center gap-1.5 transform active:scale-95 border border-transparent ${getAccentClass()}`}
                     >
                       <span>{t === "All" ? "Tous 🗺️" : t}</span>
-                      {resourceProgressStats.global &&
-                        resourceProgressStats.global.total > 0 &&
-                        t === "All" && (
-                          <span
-                            className={`text-[9.5px] font-bold px-1 rounded ${
-                              isSelected
-                                ? "bg-black/25 text-emerald-300"
-                                : "bg-emerald-50 text-emerald-700"
-                            }`}
-                            title={`${resourceProgressStats.global.seen}/${resourceProgressStats.global.total} documents consultés`}
-                          >
-                            👁️ {resourceProgressStats.global.pct}%
-                          </span>
-                        )}
-                      {t !== "All" &&
-                        resourceProgressStats.byTopic[t] &&
-                        resourceProgressStats.byTopic[t].total > 0 && (
-                          <span
-                            className={`text-[9.5px] font-bold px-1 rounded ${
-                              isSelected
-                                ? "bg-black/25 text-emerald-300"
-                                : "bg-emerald-50 text-emerald-700"
-                            }`}
-                            title={`${resourceProgressStats.byTopic[t].seen}/${resourceProgressStats.byTopic[t].total} documents consultés`}
-                          >
-                            👁️ {resourceProgressStats.byTopic[t].pct}%
-                          </span>
-                        )}
                       <span
                         className={`px-1.5 py-0.2 text-[9px] font-black rounded-full leading-none flex items-center justify-center ${
                           isSelected
@@ -6156,38 +5641,6 @@ export default function App() {
                           sous ce bloc
                         </p>
 
-                        {resourceProgressStats.byBlock[group.blockCode] &&
-                          resourceProgressStats.byBlock[group.blockCode].total >
-                            0 && (
-                            <div className="mt-2 flex items-center gap-3 w-64 sm:w-80">
-                              <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden shadow-inner">
-                                <div
-                                  className="h-full bg-purple-600 rounded-full transition-all duration-500"
-                                  style={{
-                                    width: `${resourceProgressStats.byBlock[group.blockCode].pct}%`,
-                                  }}
-                                />
-                              </div>
-                              <span className="text-[10px] font-black text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-500/10 font-mono">
-                                👁️{" "}
-                                {
-                                  resourceProgressStats.byBlock[group.blockCode]
-                                    .seen
-                                }
-                                /
-                                {
-                                  resourceProgressStats.byBlock[group.blockCode]
-                                    .total
-                                }{" "}
-                                documents (
-                                {
-                                  resourceProgressStats.byBlock[group.blockCode]
-                                    .pct
-                                }
-                                %)
-                              </span>
-                            </div>
-                          )}
                       </div>
                     </div>
 
@@ -6228,31 +5681,6 @@ export default function App() {
                                 </h5>
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
-                                {(() => {
-                                  const mStat =
-                                    resourceProgressStats.byModule[
-                                      mod.moduleCode
-                                    ];
-                                  if (mStat && mStat.total > 0) {
-                                    return (
-                                      <div className="flex items-center gap-2 w-44 sm:w-56 bg-white/90 border border-slate-200/55 p-1 px-2.5 rounded-full shadow-xs">
-                                        <span className="text-[8.5px] font-bold text-slate-500 font-mono whitespace-nowrap shrink-0">
-                                          Vu : {mStat.seen}/{mStat.total}
-                                        </span>
-                                        <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                          <div
-                                            className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                                            style={{ width: `${mStat.pct}%` }}
-                                          />
-                                        </div>
-                                        <span className="text-[9px] font-black text-emerald-600 font-mono text-right shrink-0">
-                                          {mStat.pct}%
-                                        </span>
-                                      </div>
-                                    );
-                                  }
-                                  return null;
-                                })()}
                                 <span className="text-[10.5px] font-bold text-slate-400 bg-slate-100 px-2 rounded-lg border border-slate-150">
                                   {mod.fiches.length}{" "}
                                   {mod.fiches.length > 1
