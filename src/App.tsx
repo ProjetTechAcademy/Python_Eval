@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { initialFiches, EVAL_FICHES_IDS } from "./data/initialData";
-import { dwwmFiches } from "./data/dwwmFiches";
-import { digitalFiches } from "./data/digitalFiches";
 import { Fiche, FicheStatus, ScheduledDate, Reminder } from "./types";
 import ThreeDBox from "./components/ThreeDBox";
 import ResourcePlayer from "./components/ResourcePlayer";
@@ -43,6 +41,9 @@ import {
   ArrowDown,
   Trash2,
   Bell,
+  Youtube,
+  Music,
+  MessageSquare
 } from "lucide-react";
 
 function getDriveEmbedUrl(url: string | undefined): string | null {
@@ -50,13 +51,11 @@ function getDriveEmbedUrl(url: string | undefined): string | null {
   const trimmed = url.trim();
   if (!trimmed.startsWith("http")) return null;
 
-  // Google Drive files (view/edit/share links)
   const driveFileMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   if (driveFileMatch && driveFileMatch[1]) {
     return `https://drive.google.com/file/d/${driveFileMatch[1]}/preview`;
   }
 
-  // Google Docs, Presentations (Slides), and Sheets
   if (trimmed.includes("docs.google.com")) {
     const docMatch = trimmed.match(
       /\/(document|presentation|spreadsheets)\/d\/([a-zA-Z0-9_-]+)/,
@@ -157,17 +156,11 @@ export default function App() {
     if (local) {
       try {
         list = JSON.parse(local);
-        const existingIds = new Set(list.map((f) => f.id));
-        const missingDwwm = dwwmFiches.filter((f) => !existingIds.has(f.id));
-        const missingDigital = digitalFiches.filter(
-          (f) => !existingIds.has(f.id),
-        );
-        list = [...list, ...missingDwwm, ...missingDigital];
       } catch (e) {
-        list = [...initialFiches, ...dwwmFiches, ...digitalFiches];
+        list = [...initialFiches];
       }
     } else {
-      list = [...initialFiches, ...dwwmFiches, ...digitalFiches];
+      list = [...initialFiches];
     }
     return list.map((f) => {
       const isEvalFiche = f.id < 1000 && EVAL_FICHES_IDS.has(f.id);
@@ -671,58 +664,22 @@ export default function App() {
 
         if (base && isDefaultUrl) {
           const [textC, textA, textB, textD, textE] = await Promise.all([
-            fetchText(`${base}?gid=1056100740&single=true&output=csv`), // Zone C
-            fetchText(`${base}?gid=0&single=true&output=csv`), // Zone A
-            fetchText(`${base}?gid=531214884&single=true&output=csv`), // Zone B
-            fetchText(`${base}?gid=360119093&single=true&output=csv`), // Zone D
-            fetchText(`${base}?gid=2058904440&single=true&output=csv`), // Zone E
+            fetchText(`${base}?gid=1056100740&single=true&output=csv`),
+            fetchText(`${base}?gid=0&single=true&output=csv`),
+            fetchText(`${base}?gid=531214884&single=true&output=csv`),
+            fetchText(`${base}?gid=360119093&single=true&output=csv`),
+            fetchText(`${base}?gid=2058904440&single=true&output=csv`),
           ]);
 
-          // Force isolation at parsing level
-          const sheetC = parseSingleTextToSheet(textC).map((f) => ({
-            ...f,
-            inZoneC: true,
-            inZoneA: false,
-            inZoneB: false,
-            inZoneD: false,
-            inZoneE: false,
-          }));
-          const sheetA = parseSingleTextToSheet(textA).map((f) => ({
-            ...f,
-            inZoneA: true,
-            inZoneB: false,
-            inZoneC: false,
-            inZoneD: false,
-            inZoneE: false,
-          }));
-          const sheetB = parseSingleTextToSheet(textB).map((f) => ({
-            ...f,
-            inZoneB: true,
-            inZoneA: false,
-            inZoneC: false,
-            inZoneD: false,
-            inZoneE: false,
-          }));
-          const sheetD = parseSingleTextToSheet(textD).map((f) => ({
-            ...f,
-            inZoneD: true,
-            inZoneA: false,
-            inZoneB: false,
-            inZoneC: false,
-            inZoneE: false,
-          }));
-          const sheetE = parseSingleTextToSheet(textE).map((f) => ({
-            ...f,
-            inZoneE: true,
-            inZoneA: false,
-            inZoneB: false,
-            inZoneC: false,
-            inZoneD: false,
-          }));
+          const parsedC = parseSingleTextToSheet(textC); parsedC.section = "eval0";
+          const parsedA = parseSingleTextToSheet(textA); parsedA.section = "eval1";
+          const parsedB = parseSingleTextToSheet(textB); parsedB.section = "eval2";
+          const parsedD = parseSingleTextToSheet(textD); parsedD.section = "dwwm";
+          const parsedE = parseSingleTextToSheet(textE); parsedE.section = "digital";
 
           setFiches((current) => {
             const merged = mergeSheets(
-              [sheetC, sheetA, sheetB, sheetD, sheetE],
+              [parsedC, parsedA, parsedB, parsedD, parsedE],
               current,
             );
             localStorage.setItem("m-motors-fiches", JSON.stringify(merged));
@@ -2470,7 +2427,7 @@ export default function App() {
                 redirections externes
               </div>
             </div>
-          ))}
+          )}
       </div>
     );
   };
@@ -4836,237 +4793,23 @@ export default function App() {
           </div>
         )}
 
-        {/* 3. SWITCH HUB ZONE: ACTIVATE USER INTERFACES */}
+        {/* 3. SWITCH HUB ZONE & MEDIAS : ACTIVATE USER INTERFACES */}
         <div className="w-full flex justify-center mb-8 px-4">
-          <div
-            className={`p-1.5 bg-slate-900 border border-slate-800 rounded-[24px] shadow-lg flex flex-wrap sm:flex-nowrap gap-1.5 w-full max-w-5xl transition-all duration-300 ring-4 hover:scale-[1.01] ${
-              activeZone === "A"
-                ? "ring-blue-500/20"
-                : activeZone === "B"
-                  ? "ring-red-500/20"
-                  : activeZone === "C"
-                    ? "ring-emerald-500/20"
-                    : activeZone === "D"
-                      ? "ring-violet-500/20"
-                      : "ring-pink-500/20"
-            }`}
-          >
-            <button
-              onClick={() => {
-                setActiveZone("A");
-                triggerToast(
-                  "Zone A activée : Ma Progression Personnelle 🎯",
-                  "info",
-                );
-              }}
-              className={`flex-1 py-2 px-3 rounded-2xl text-[10px] md:text-xs font-bold uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
-                activeZone === "A"
-                  ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-              }`}
-            >
-              <User className="w-3.5 h-3.5 shrink-0" />
-              Zone A: Moi
-            </button>
-            <button
-              onClick={() => {
-                setActiveZone("B");
-                triggerToast(
-                  "Zone B activée : Livrables pour le Jury ⚖️",
-                  "info",
-                );
-              }}
-              className={`flex-1 py-2 px-3 rounded-2xl text-[10px] md:text-xs font-bold uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
-                activeZone === "B"
-                  ? "bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-              }`}
-            >
-              <GraduationCap className="w-3.5 h-3.5 shrink-0" />
-              Zone B: Jury
-            </button>
-            <button
-              onClick={() => {
-                setActiveZone("C");
-                triggerToast("Zone C activée : Zone Commune Neutre 🌐", "info");
-              }}
-              className={`flex-1 py-2 px-3 rounded-2xl text-[10px] md:text-xs font-bold uppercase flex items-justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
-                activeZone === "C"
-                  ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5 shrink-0" />
-              Zone C: Commune
-            </button>
-            <button
-              onClick={() => {
-                setActiveZone("D");
-                triggerToast("Zone D activée : Formation DWWM 🧭", "info");
-              }}
-              className={`flex-1 py-2 px-3 rounded-2xl text-[10px] md:text-xs font-bold uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
-                activeZone === "D"
-                  ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-              }`}
-            >
-              <Compass className="w-3.5 h-3.5 shrink-0" />
-              Zone D: DWWM
-            </button>
-            <button
-              onClick={() => {
-                setActiveZone("E");
-                triggerToast("Zone E activée : Digital CDO & SD 🚀", "info");
-              }}
-              className={`flex-1 py-2 px-3 rounded-2xl text-[10px] md:text-xs font-bold uppercase flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer transform active:scale-95 ${
-                activeZone === "E"
-                  ? "bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-md"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-              }`}
-            >
-              <Flame className="w-3.5 h-3.5 shrink-0" />
-              Zone E: Digital CDO & SD
-            </button>
-          </div>
-        </div>
-
-        {/* 1. OVERALL STATS BENTO BOARD : UNIQUE ET ISOLÉ (LA ZONE ACTIVE SEULEMENT) */}
-        <div className="mb-8">
-          <ThreeDBox
-            themeColor={activeInfo.color as any}
-            className="flex flex-col justify-between max-w-4xl mx-auto shadow-2xl ring-4 ring-slate-900/5"
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <span
-                  className={`text-xs uppercase tracking-wider font-bold ${activeInfo.themeText} font-mono`}
-                >
-                  {activeInfo.title1}
-                </span>
-                <h4 className="text-2xl font-black text-slate-900 mt-1">
-                  {activeInfo.title2}
-                </h4>
-              </div>
-              {activeInfo.icon}
+          <div className="p-3 bg-white border border-slate-200 rounded-full shadow-sm flex flex-wrap sm:flex-nowrap gap-4 items-center justify-center w-auto transition-all duration-300">
+            <div className="flex items-center gap-2 border-r border-slate-200 pr-4">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-1">Zones :</span>
+              <button onClick={() => { setActiveZone("A"); triggerToast("Zone A activée", "info"); }} className={`w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${activeZone === "A" ? "bg-[#4285F4] text-white border-[#4285F4] shadow-md shadow-blue-500/20" : "text-[#4285F4] border-[#4285F4] hover:bg-[#4285F4]/10"}`}>A</button>
+              <button onClick={() => { setActiveZone("B"); triggerToast("Zone B activée", "info"); }} className={`w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${activeZone === "B" ? "bg-[#EA4335] text-white border-[#EA4335] shadow-md shadow-red-500/20" : "text-[#EA4335] border-[#EA4335] hover:bg-[#EA4335]/10"}`}>B</button>
+              <button onClick={() => { setActiveZone("C"); triggerToast("Zone C activée", "info"); }} className={`w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${activeZone === "C" ? "bg-[#FBBC05] text-white border-[#FBBC05] shadow-md shadow-yellow-500/20" : "text-[#FBBC05] border-[#FBBC05] hover:bg-[#FBBC05]/10"}`}>C</button>
+              <button onClick={() => { setActiveZone("D"); triggerToast("Zone D activée", "info"); }} className={`w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${activeZone === "D" ? "bg-[#34A853] text-white border-[#34A853] shadow-md shadow-green-500/20" : "text-[#34A853] border-[#34A853] hover:bg-[#34A853]/10"}`}>D</button>
+              <button onClick={() => { setActiveZone("E"); triggerToast("Zone E activée", "info"); }} className={`w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${activeZone === "E" ? "bg-[#4285F4] text-white border-[#4285F4] shadow-md shadow-blue-500/20" : "text-[#4285F4] border-[#4285F4] hover:bg-[#4285F4]/10"}`}>E</button>
             </div>
-
-            <div className="my-6">
-              <div className="flex items-baseline gap-2">
-                <span className="text-5xl font-black text-slate-950">
-                  {activeInfo.stats.pct}%
-                </span>
-                <span className="text-sm text-slate-500 font-bold">
-                  de fiches validées dans cette zone
-                </span>
-              </div>
-              <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden mt-4 border border-slate-200">
-                <div
-                  className={`${activeInfo.bg} h-full rounded-full transition-all duration-500 shadow-inner`}
-                  style={{ width: `${activeInfo.stats.pct}%` }}
-                />
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-1 hidden sm:inline">Médias :</span>
+              <a href="https://music.apple.com/fr/new" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full border-2 border-[#EA4335] text-[#EA4335] hover:bg-[#EA4335]/10 flex items-center justify-center transition-all" title="Apple Music"><Music className="w-4 h-4" /></a>
+              <a href="https://www.youtube.com/watch?v=mvbM-LauoqQ&list=PLn-G6Zl1XH-W6JOtQ3YNpgXW2qx7ig_oF" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full border-2 border-[#FBBC05] text-[#FBBC05] hover:bg-[#FBBC05]/10 flex items-center justify-center transition-all" title="YouTube"><Youtube className="w-4 h-4" /></a>
+              <a href="https://discord.gg/cp3DQPkXdw" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full border-2 border-[#34A853] text-[#34A853] hover:bg-[#34A853]/10 flex items-center justify-center transition-all" title="Discord"><MessageSquare className="w-4 h-4" /></a>
             </div>
-
-            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-200 text-sm">
-              <div>
-                <p className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  Terminées ✔
-                </p>
-                <p className="text-xl font-extrabold text-[#34A853]">
-                  {activeInfo.stats.fait} fiches
-                </p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  Travail ⏳
-                </p>
-                <p className="text-xl font-extrabold text-[#FBBC05]">
-                  {activeInfo.stats.cours} fiches
-                </p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  Reste 💤
-                </p>
-                <p className="text-xl font-extrabold text-[#EA4335]">
-                  {activeInfo.stats.faire} fiches
-                </p>
-              </div>
-            </div>
-          </ThreeDBox>
-        </div>
-
-        {/* CLUB ÉLITE & DIVERTISSEMENT - MATHILDE'S PEPS GRADIENTS */}
-        <div className="max-w-7xl mx-auto mb-8">
-          <div className="bg-gradient-to-br from-slate-900 to-indigo-950 p-5 rounded-3xl border border-indigo-500/10 shadow-xl relative overflow-hidden flex flex-col justify-between">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full filter blur-2xl pointer-events-none"></div>
-            <div>
-              <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5 mb-3.5">
-                <div className="flex items-center gap-2">
-                  <span className="p-1 px-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs leading-none">
-                    💫
-                  </span>
-                  <h4 className="font-black text-xs uppercase text-slate-200 tracking-widest">
-                    Le Club Élite & Divertissement
-                  </h4>
-                </div>
-                <span className="text-[10px] text-pink-400 font-extrabold uppercase font-mono tracking-wider tracking-widest">
-                  PEP’S ENERGY ⚡
-                </span>
-              </div>
-
-              <p className="text-[10.5px] text-slate-350 leading-relaxed mb-4 font-medium">
-                Accédez directement aux serveurs communautaires et plateformes
-                de partage pour briser l'isolement et booster votre
-                apprentissage en joie !
-              </p>
-
-              <div className="flex flex-col gap-2.5">
-                <a
-                  href="https://discord.gg/cp3DQPkXdw"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-3 bg-gradient-to-r from-indigo-600/60 to-[#5865F2]/80 hover:from-indigo-600 hover:to-[#5865F2] border border-indigo-500/20 text-white rounded-2xl flex items-center justify-between gap-3 shadow-md hover:scale-[1.01] transition-all cursor-pointer select-none group"
-                >
-                  <div className="min-w-0 flex-1">
-                    <span className="text-[9px] text-indigo-200 font-extrabold block tracking-wider uppercase">
-                      GROUPE DISCORD OFFICIEL :
-                    </span>
-                    <h5 className="font-extrabold text-xs text-white truncate group-hover:underline">
-                      La Villa des Codeurs Brisés 💔 🌴 Dev Elite Club
-                    </h5>
-                  </div>
-                  <ExternalLink className="w-4 h-4 text-indigo-200 shrink-0" />
-                </a>
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  <a
-                    href="https://music.apple.com/fr/new"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2.5 bg-gradient-to-r from-pink-650 to-rose-650 text-white rounded-2xl flex items-center justify-between gap-2 shadow hover:opacity-95 transition-all text-[11px] font-black cursor-pointer select-none"
-                  >
-                    <span>🍎 Apple Music</span>
-                    <ExternalLink className="w-3.5 h-3.5 text-white/85 shrink-0" />
-                  </a>
-
-                  <a
-                    href="https://www.youtube.com/watch?v=mvbM-LauoqQ&list=PLn-G6Zl1XH-W6JOtQ3YNpgXW2qx7ig_oF"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2.5 bg-gradient-to-r from-red-650 to-orange-655 text-white rounded-2xl flex items-center justify-between gap-2 shadow hover:opacity-95 transition-all text-[11px] font-black cursor-pointer select-none"
-                  >
-                    <span>📺 Playlist YouTube</span>
-                    <ExternalLink className="w-3.5 h-3.5 text-white/85 shrink-0" />
-                  </a>
-                </div>
-              </div>
-            </div>
-
-            <p className="text-[9px] text-slate-500 pt-3 border-t border-white/[0.04] mt-4 font-mono">
-              ⚡ Rejoignez l'élite des codeurs pour échanger sur le devoir
-              M-Motors.
-            </p>
           </div>
         </div>
 
