@@ -244,7 +244,6 @@ export default function App() {
   const [selectedStatus, setSelectedStatus] = useState<string>("All");
   const [showSyncPanel, setShowSyncPanel] = useState(false);
 
-
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "info";
@@ -672,11 +671,11 @@ export default function App() {
 
         if (base && isDefaultUrl) {
           const [textC, textA, textB, textD, textE] = await Promise.all([
-            fetchText(`${base}?output=csv&gid=1056100740`), // Zone C
-            fetchText(`${base}?output=csv&gid=0`), // Zone A
-            fetchText(`${base}?output=csv&gid=531214884`), // Zone B
-            fetchText(`${base}?output=csv&gid=360119093`), // Zone D
-            fetchText(`${base}?output=csv&gid=2058904440`), // Zone E
+            fetchText(`${base}?gid=1056100740&single=true&output=csv`), // Zone C
+            fetchText(`${base}?gid=0&single=true&output=csv`), // Zone A
+            fetchText(`${base}?gid=531214884&single=true&output=csv`), // Zone B
+            fetchText(`${base}?gid=360119093&single=true&output=csv`), // Zone D
+            fetchText(`${base}?gid=2058904440&single=true&output=csv`), // Zone E
           ]);
 
           // Force isolation at parsing level
@@ -1068,7 +1067,6 @@ export default function App() {
     }
   };
 
-  // Filtration stricte par Zone
   const fichesInZoneA = useMemo(
     () => fiches.filter((f) => f.inZoneA === true),
     [fiches],
@@ -1173,7 +1171,6 @@ export default function App() {
     };
   }, [fichesInZoneE]);
 
-  // Propriétés du composant Box 3D en fonction de la Zone Actuelle (Isolation parfaite)
   const getActiveZoneInfo = () => {
     switch (activeZone) {
       case "A":
@@ -1256,7 +1253,6 @@ export default function App() {
     "DWWM",
     "Digital CDO & SD",
   ];
-
 
   const fichesFilteredOnlyByBlockAndModule = useMemo(() => {
     return fichesFilteredByZone.filter((f) => {
@@ -1419,8 +1415,6 @@ export default function App() {
       });
   }, [filteredFiches]);
 
-
-
   const renderFicheCard = (fiche: Fiche) => {
     const currentStatus =
       activeZone === "A"
@@ -1460,7 +1454,7 @@ export default function App() {
         });
       }
     }
-    // Tri des ressources : vidéo en premier
+
     const priority: Record<string, number> = {
       video: 1,
       audio: 2,
@@ -1471,7 +1465,7 @@ export default function App() {
       studi: 7,
     };
     ficheResources.sort(
-      (a, b) => (priority[a.type] ?? 99) - (priority[b.type] ?? 99)
+      (a, b) => (priority[a.type] ?? 99) - (priority[b.type] ?? 99),
     );
 
     return (
@@ -1568,7 +1562,6 @@ export default function App() {
               <h3 className="font-extrabold text-slate-900 text-sm sm:text-base md:text-lg leading-snug mt-1 text-balance">
                 {fiche.title}
               </h3>
-
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1782,7 +1775,6 @@ export default function App() {
                   );
                 })()}
 
-              {/* Affichage des supports stricts selon la zone active */}
               <div>
                 {activeZone === "A" &&
                   (fiche.audio1 ||
@@ -4938,9 +4930,6 @@ export default function App() {
           </div>
         </div>
 
-
-
-
         {/* 1. OVERALL STATS BENTO BOARD : UNIQUE ET ISOLÉ (LA ZONE ACTIVE SEULEMENT) */}
         <div className="mb-8">
           <ThreeDBox
@@ -5510,7 +5499,6 @@ export default function App() {
                             : "fiche d'étude"}{" "}
                           sous ce bloc
                         </p>
-
                       </div>
                     </div>
 
@@ -5582,197 +5570,38 @@ export default function App() {
         )}
 
         {/* 6. FLOATING ELEVATOR NAVIGATION CONTROL DECK */}
-        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2 shrink-0 select-none max-w-[160px] md:max-w-xs animate-slideUp">
-          {elevatorExpanded ? (
-            <div className="bg-slate-900/95 backdrop-blur border border-slate-755 p-2.5 sm:p-3 rounded-3xl shadow-2xl flex flex-col gap-2.5 text-white max-w-[160px] md:max-w-[200px] transition-all duration-300">
-              <div className="border-b border-slate-800 pb-1 flex items-center justify-between gap-1">
-                <span className="text-[9px] uppercase font-black tracking-widest text-[#4285F4] flex items-center gap-1">
-                  <Compass className="w-3 h-3 text-[#4285F4] animate-spin" />{" "}
-                  ASCENSEUR 🧭
-                </span>
-                <button
-                  onClick={() => setElevatorExpanded(false)}
-                  className="text-[10px] text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-1.5 py-0.5 rounded-md font-black cursor-pointer"
-                  title="Plier l'ascenseur"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <p className="text-[8px] font-black uppercase text-slate-500 tracking-wider">
-                  Accès Zones :
-                </p>
-                <div className="grid grid-cols-4 gap-1">
-                  <button
-                    onClick={() => {
-                      setActiveZone("A");
-                      triggerToast("🎯 Zone A activée !", "success");
-                      window.scrollTo({ top: 400, behavior: "smooth" });
-                    }}
-                    className={`py-1 text-xs font-black rounded-lg text-center transition-all cursor-pointer ${
-                      activeZone === "A"
-                        ? "bg-[#4285F4] text-white shadow-md shadow-blue-500/20 scale-105"
-                        : "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                    }`}
-                    title="Sauter à la Zone A (Moi)"
-                  >
-                    A
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveZone("B");
-                      triggerToast("📢 Zone B activée !", "success");
-                      window.scrollTo({ top: 400, behavior: "smooth" });
-                    }}
-                    className={`py-1 text-xs font-black rounded-lg text-center transition-all cursor-pointer ${
-                      activeZone === "B"
-                        ? "bg-[#EA4335] text-white shadow-md shadow-red-500/20 scale-105"
-                        : "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                    }`}
-                    title="Sauter à la Zone B (Jury)"
-                  >
-                    B
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveZone("C");
-                      triggerToast("🤝 Zone commune activée !", "success");
-                      window.scrollTo({ top: 400, behavior: "smooth" });
-                    }}
-                    className={`py-1 text-xs font-black rounded-lg text-center transition-all cursor-pointer ${
-                      activeZone === "C"
-                        ? "bg-emerald-600 text-white shadow-md shadow-emerald-500/20 scale-105"
-                        : "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                    }`}
-                    title="Sauter à la Zone C (Commune)"
-                  >
-                    C
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveZone("D");
-                      triggerToast("🧭 Zone D (DWWM) activée !", "success");
-                      window.scrollTo({ top: 400, behavior: "smooth" });
-                    }}
-                    className={`py-1 text-xs font-black rounded-lg text-center transition-all cursor-pointer ${
-                      activeZone === "D"
-                        ? "bg-violet-600 text-white shadow-md shadow-violet-500/20 scale-105"
-                        : "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                    }`}
-                    title="Sauter à la Zone D"
-                  >
-                    D
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveZone("E");
-                      triggerToast("🚀 Zone E (Digital) activée !", "success");
-                      window.scrollTo({ top: 400, behavior: "smooth" });
-                    }}
-                    className={`col-span-4 py-1 text-xs font-black rounded-lg text-center transition-all cursor-pointer mt-1 ${
-                      activeZone === "E"
-                        ? "bg-pink-600 text-white shadow-md shadow-pink-500/20 scale-105"
-                        : "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                    }`}
-                    title="Sauter à la Zone E"
-                  >
-                    Zone E
-                  </button>
-                </div>
-              </div>
-
-              {viewMode === "segmented" &&
-                fichesGroupedByBlockAndModule.length > 0 && (
-                  <div className="flex flex-col gap-1.5 border-t border-slate-800 pt-2 max-h-[140px] overflow-y-auto no-scrollbar">
-                    <p className="text-[8px] font-black uppercase text-slate-500 tracking-wider">
-                      Sauts de Blocs :
-                    </p>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {fichesGroupedByBlockAndModule.map((group) => (
-                        <button
-                          key={group.blockCode}
-                          onClick={() => {
-                            const el = document.getElementById(
-                              `scroll-block-${group.blockCode}`,
-                            );
-                            if (el) {
-                              el.scrollIntoView({
-                                behavior: "smooth",
-                                block: "center",
-                              });
-                              triggerToast(
-                                `Défilé vers le bloc : ${group.blockCode} 📍`,
-                                "info",
-                              );
-                              if (!expandedBlocks[group.blockCode]) {
-                                toggleBlockExpanded(group.blockCode);
-                              }
-                            } else {
-                              triggerToast(
-                                "Bloc non présent dans la vue actuelle",
-                                "info",
-                              );
-                            }
-                          }}
-                          className="p-1 text-[9px] font-black uppercase text-slate-300 bg-slate-800 rounded-md hover:bg-slate-700 transition-colors cursor-pointer"
-                        >
-                          {group.blockCode}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-              <div className="flex items-center justify-between gap-2 border-t border-slate-800 pt-2">
-                <button
-                  onClick={() => {
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                    triggerToast("⬆️ Défilement tout en haut !", "info");
-                  }}
-                  className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all flex items-center justify-center gap-1 font-bold text-[10px] cursor-pointer"
-                  title="Tout en haut"
-                >
-                  <ArrowUp className="w-3.5 h-3.5" /> Haut
-                </button>
-                <button
-                  onClick={() => {
-                    window.scrollTo({
-                      top: document.body.scrollHeight,
-                      behavior: "smooth",
-                    });
-                    triggerToast("⬇️ Défilement tout en bas !", "info");
-                  }}
-                  className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all flex items-center justify-center gap-1 font-bold text-[10px] cursor-pointer"
-                  title="Tout en bas"
-                >
-                  <ArrowDown className="w-3.5 h-3.5" /> Bas
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setElevatorExpanded(true)}
-              className="w-12 h-12 bg-slate-900 border border-slate-750 hover:bg-slate-850 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer ring-4 ring-blue-500/20"
-              title="Ouvrir l'ascenseur de navigation"
-            >
-              <Compass className="w-6 h-6 text-blue-400 animate-pulse" />
-            </button>
-          )}
+        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2 shrink-0 select-none max-w-[160px] md:max-w-none">
+          <button
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="p-3 bg-slate-900 text-white rounded-full shadow-lg hover:bg-slate-800 hover:-translate-y-1 transition-all cursor-pointer border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            title="Remonter en haut"
+          >
+            <ArrowUp className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() =>
+              window.scrollTo({
+                top: document.body.scrollHeight,
+                behavior: "smooth",
+              })
+            }
+            className="p-3 bg-slate-900 text-white rounded-full shadow-lg hover:bg-slate-800 hover:translate-y-1 transition-all cursor-pointer border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            title="Descendre en bas"
+          >
+            <ArrowDown className="w-5 h-5" />
+          </button>
         </div>
       </main>
 
-      {/* Modern Compact Floating Navigation Footer */}
-      <footer className="mt-20 border-t border-slate-200 py-12 bg-white text-center">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col items-center justify-center gap-5">
-          <div className="flex items-center justify-center gap-5">
+      <footer className="mt-auto py-8 bg-slate-900 border-t border-slate-800 text-slate-400 text-center shrink-0">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col items-center gap-4">
+          <div className="flex items-center justify-center gap-4 mb-2 flex-wrap">
             <img
-              src="https://projettechacademy.github.io/Projet_Python/Asset/Logo_MMPA.jpeg"
-              alt="Logo MMPA"
+              src="https://projettechacademy.github.io/Projet_Python/Asset/940866A4-FC7D-40B1-8C7C-A54D743ED2A2.png"
+              alt="Logo Tech Academy"
               referrerPolicy="no-referrer"
               className="h-14 rounded-xl border border-slate-150 shadow-sm object-contain hover:scale-105 transition-transform"
             />
-            <div className="w-px h-8 bg-slate-350" />
             <img
               src="https://projettechacademy.github.io/Projet_Python/Asset/2127845D-F95D-49C0-A22B-88C07817841B.png"
               alt="Logo PAIA Footer"
@@ -5809,9 +5638,8 @@ export default function App() {
         fiche={selectedSpeechFiche}
         isOpen={selectedSpeechFiche !== null}
         onClose={() => setSelectedSpeechFiche(null)}
+        activeZone={activeZone}
       />
-
-      {renderReminderModal()}
     </div>
   );
 }
