@@ -255,8 +255,8 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2' | 'dw
       inZoneA: hasEval1 ? false : fiche.inZoneA,
       inZoneB: hasEval2 ? false : fiche.inZoneB,
       inZoneC: hasEval0 ? false : fiche.inZoneC,
-      inZoneD: (hasDwwm || hasDigital) ? false : fiche.inZoneD,
-      inZoneE: false,
+      inZoneD: hasDwwm ? false : fiche.inZoneD,
+      inZoneE: hasDigital ? false : fiche.inZoneE,
     };
   });
 
@@ -348,7 +348,7 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2' | 'dw
         if (rec.nblm) m.nblm4 = rec.nblm;
         if (rec.suivi) m.suivi4 = rec.suivi;
       } else if (section === 'digital') {
-        m.inZoneD = true;
+        m.inZoneE = true;
         m.status5 = (m.status5 && m.status5 !== 'A faire' && rec.status === 'A faire') ? m.status5 : rec.status;
         if (rec.date) m.date5 = rec.date;
         if (rec.audio) m.audio5 = rec.audio;
@@ -402,8 +402,8 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2' | 'dw
       inZoneA: isEvalFiche ? (up.inZoneA === true) : false,
       inZoneB: isEvalFiche ? (up.inZoneB === true) : false,
       inZoneC: (isDwwm || isDigital) ? false : (up.inZoneC === true),
-      inZoneD: (isDwwm || isDigital) ? true : false,
-      inZoneE: false,
+      inZoneD: isDwwm ? (up.inZoneD !== undefined ? up.inZoneD === true : true) : false,
+      inZoneE: isDigital ? (up.inZoneE !== undefined ? up.inZoneE === true : true) : false,
     } as Fiche;
   });
 
@@ -412,7 +412,7 @@ export const mergeSheets = (sheets: { section: 'eval0' | 'eval1' | 'eval2' | 'dw
 
 export default function CsvLoader({ onDataLoaded, currentCount, currentList }: CsvLoaderProps) {
   const [csvUrl, setCsvUrl] = useState(() => {
-    return localStorage.getItem('m-motors-spreadsheet-url') || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS9upnowMIAhXQO5l7H-m9dfBtytEEugAA_ChZthJRiKILpUNJgrCSHHvQXRt_0QNF-2Sb8ie7gfi0L/pub?output=csv';
+    return localStorage.getItem('m-motors-spreadsheet-url') || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQkuLkHLmUN14DNmInxhF_xdheMJg5f_0pF4lU7bcytj7-869dshb05YWSJkT5cqoD2HcUjIbU36fzm/pub?output=csv';
   });
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -448,7 +448,7 @@ export default function CsvLoader({ onDataLoaded, currentCount, currentList }: C
     
     try {
       const base = getBasePubUrl(csvUrl);
-      const isDefaultUrl = csvUrl.includes("2PACX-1vS9upnowMIAhXQO5l7H-m9dfBtytEEugAA_ChZthJRiKILpUNJgrCSHHvQXRt_0QNF-2Sb8ie7gfi0L");
+      const isDefaultUrl = csvUrl.includes("2PACX-1vQkuLkHLmUN14DNmInxhF_xdheMJg5f_0pF4lU7bcytj7-869dshb05YWSJkT5cqoD2HcUjIbU36fzm");
 
       // Save custom url to localStorage so background sync doesn't overwrite it
       localStorage.setItem('m-motors-spreadsheet-url', csvUrl);

@@ -74,7 +74,8 @@ function parseCsv() {
       nblm5: nblmVal || undefined,
       info5: infoVal || undefined,
       studi: lienVal || undefined,
-      inZoneD: true
+      inZoneD: false,
+      inZoneE: true
     };
     fiches.push(fiche);
   }
